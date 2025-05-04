@@ -8,9 +8,13 @@ use super::{WallpaperBackend, WallpaperBackendError};
 pub struct SwwCliBackend;
 
 impl WallpaperBackend for SwwCliBackend {
-    fn set_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), WallpaperBackendError> {
+    fn set_wallpaper(&self, wallpaper: &impl Wallpaper) -> Result<(), WallpaperBackendError> {
         let output = Command::new("swww")
-            .args(["img", "--resize=fit", wallpaper.path.as_ref()])
+            .args([
+                "img",
+                "--resize=fit",
+                wallpaper.get_wallpaper_on_disk().to_str().unwrap(),
+            ])
             .output()
             .map_err(|_| WallpaperBackendError::ChangeFailure)?;
 
