@@ -9,11 +9,12 @@ use self::config::Config;
 use self::content_managers::local::LocalContentManager;
 use self::store::Store;
 use self::wallpaper::WallpapersManager;
+use chrono::{DateTime, Datelike, Duration, Local, TimeZone};
 use once_cell::sync::OnceCell;
 use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::Duration as StdDuration;
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
 pub fn get_config() -> &'static Config {
@@ -36,8 +37,41 @@ fn main() -> Result<(), String> {
         .map_err(|err| err.to_string())?;
 
     loop {
-        wallpaper_manager.set_next_wallpaper();
-        // sleep(Duration::from_secs(60));
-        sleep(Duration::from_secs(10));
+        let last_update = store.get_last_update();
+        if should_update_wallpaper(get_config().file_config.local.update_interval, last_update) {
+            wallpaper_manager.set_next_wallpaper();
+        }
+        // sleep(StdDuration::from_secs(60));
+        sleep(StdDuration::from_secs(10));
     }
+}
+
+fn should_update_wallpaper(interval: u32, last_run_time: Option<DateTime<Local>>) -> bool {
+    let current_time = Local::now();
+    let today = Local
+        .with_ymd_and_hms(
+            current_time.year(),
+            current_time.month(),
+            current_time.day(),
+            0,
+            0,
+            0,
+        )
+        .single()
+        .expect("failed to get start of day");
+
+    let total_mins_today = (current_time - today).num_minutes() as f64;
+    let group = (total_mins_today / interval as f64).floor() as u32;
+
+    let mut should_run = true;
+
+    if let Some(last_run) = last_run_time {
+        if last_run.date_naive() == current_time.date_naive() {
+            let last_group_mins = (last_run - today).num_minutes() as f64;
+            let last_group = (last_group_mins / interval as f64).floor() as u32;
+            should_run = group != last_group
+        }
+    }
+
+    should_run
 }

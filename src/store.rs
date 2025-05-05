@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use chrono::{DateTime, Local};
 use rusqlite::{Connection, Result, Statement, prepare_and_bind};
 use thiserror::Error;
 
@@ -43,10 +44,15 @@ impl TryInto<Wallpaper> for DatabaseWallpaper {
     }
 }
 
-static SETUP_SQL: &str = "CREATE TABLE IF NOT EXISTS seen_wallpapers (
+static SETUP_SEEN_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS seen_wallpapers (
            id TEXT PRIMARY KEY,
            seen BOOLEAN,
            manager_id INTEGER 
+        )";
+
+static SETUP_META_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS meta (
+           id INTEGER PRIMARY KEY,
+           last_update datetime
         )";
 
 fn make_have_seen_sql<'a>(db: &'a Connection, path: &str) -> Result<Statement<'a>> {
@@ -87,6 +93,19 @@ fn make_get_unseen_wallpapers_sql(db: &Connection) -> Result<Statement<'_>> {
     db.prepare("SELECT * FROM seen_wallpapers WHERE seen = 0")
 }
 
+fn make_last_update_sql(db: &Connection) -> Result<Statement<'_>> {
+    db.prepare("SELECT last_update FROM meta")
+}
+
+fn make_last_run_sql<'a>(db: &'a Connection, now: &DateTime<Local>) -> Result<Statement<'a>> {
+    Ok(prepare_and_bind!(
+        db,
+        "INSERT INTO meta (id, last_update)
+        VALUES (1, :now)
+        ON CONFLICT(id) DO UPDATE SET last_update = excluded.last_update"
+    ))
+}
+
 impl Store {
     pub fn new() -> Result<Store> {
         let conn = if cfg!(test) {
@@ -95,7 +114,8 @@ impl Store {
             let data_dir_path: PathBuf = get_config().data_dir.clone().into();
             Connection::open(data_dir_path.join("data.sqlite"))?
         };
-        let _ = conn.execute(SETUP_SQL, ())?;
+        let _ = conn.execute(SETUP_SEEN_TABLE_SQL, ())?;
+        let _ = conn.execute(SETUP_META_TABLE_SQL, ())?;
         let store = Store { connection: conn };
         Ok(store)
     }
@@ -180,6 +200,21 @@ impl Store {
         self.connection
             .execute("UPDATE seen_wallpapers SET seen = 0", [])
             .expect("failed to reset seen status");
+    }
+
+    pub fn get_last_update(&self) -> Option<DateTime<Local>> {
+        make_last_update_sql(&self.connection)
+            .expect("failed to make query")
+            .query_row([], |row| row.get::<_, DateTime<Local>>(0))
+            .ok()
+    }
+
+    pub fn update_last_run(&self) {
+        let now = Local::now();
+        make_last_run_sql(&self.connection, &now)
+            .expect("failed to create query")
+            .execute([now])
+            .expect("failed to update last run");
     }
 }
 

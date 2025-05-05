@@ -50,11 +50,13 @@ impl Display for FileConfig {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct LocalWallpaperConfig {
     pub location: String,
+    pub update_interval: u32,
 }
 impl Default for LocalWallpaperConfig {
     fn default() -> Self {
         LocalWallpaperConfig {
             location: "".to_string(),
+            update_interval: 1440,
         }
     }
 }

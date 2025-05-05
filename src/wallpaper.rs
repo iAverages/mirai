@@ -67,6 +67,7 @@ impl<'a> WallpapersManager<'a> {
         // TODO: handle errors
         self.backend.set_wallpaper(&next_wallpaper).unwrap();
         self.store.mark_as_seen(&next_wallpaper).unwrap();
+        self.store.update_last_run();
     }
 }
 
