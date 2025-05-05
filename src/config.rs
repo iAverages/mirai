@@ -5,6 +5,8 @@ use std::path::Path;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
+use crate::content_managers::ContentManagerTypes;
+
 const CONFIG_NAME: &str = "mirai.toml";
 
 #[derive(Debug)]
@@ -22,13 +24,15 @@ impl Display for Config {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FileConfig {
-    pub wallpapers_dir: String,
+    pub content_manager_type: ContentManagerTypes,
+    pub local: LocalWallpaperConfig,
 }
 
 impl Default for FileConfig {
     fn default() -> Self {
         FileConfig {
-            wallpapers_dir: "".to_string(),
+            content_manager_type: ContentManagerTypes::Local,
+            local: LocalWallpaperConfig::default(),
         }
     }
 }
@@ -43,7 +47,17 @@ impl Display for FileConfig {
     }
 }
 
-pub enum ConfigError {}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct LocalWallpaperConfig {
+    pub location: String,
+}
+impl Default for LocalWallpaperConfig {
+    fn default() -> Self {
+        LocalWallpaperConfig {
+            location: "".to_string(),
+        }
+    }
+}
 
 #[cfg(test)]
 impl Config {

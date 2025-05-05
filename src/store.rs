@@ -1,7 +1,11 @@
+use std::any::Any;
+use std::path::PathBuf;
+
 use rusqlite::{Connection, Result, Statement, prepare_and_bind};
 use thiserror::Error;
 
-use crate::config::Config;
+use crate::content_managers::ContentManagerTypes;
+use crate::get_config;
 use crate::wallpaper::Wallpaper;
 
 #[derive(Debug, Error)]
@@ -20,11 +24,24 @@ pub struct Store {
     connection: Connection,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DatabaseWallpaper {
     pub id: String,
     pub seen: bool,
-    pub manager_id: u32,
+    pub manager_id: u8,
+}
+
+impl TryInto<Wallpaper> for DatabaseWallpaper {
+    type Error = ();
+
+    fn try_into(self) -> Result<Wallpaper, Self::Error> {
+        let manager_id = match self.manager_id {
+            0 => Some(ContentManagerTypes::Local),
+            _ => None,
+        }
+        .ok_or(())?;
+        Ok(Wallpaper::new(self.id, manager_id))
+    }
 }
 
 static SETUP_SQL: &str = "CREATE TABLE IF NOT EXISTS seen_wallpapers (
@@ -56,7 +73,11 @@ fn make_insert_wallpaper_sql<'a>(
 ) -> Result<Statement<'a>> {
     Ok(prepare_and_bind!(
         db,
-        "INSERT INTO seen_wallpapers (id, seen, manager_id) VALUES(:id, 0, :manager_id)"
+        "INSERT INTO seen_wallpapers (id, seen, manager_id)
+         VALUES (:id, 0, :manager_id)
+         ON CONFLICT(id) DO UPDATE SET
+         seen = excluded.seen,
+         manager_id = excluded.manager_id;"
     ))
 }
 
@@ -64,54 +85,61 @@ fn make_get_all_wallpapers_sql(db: &Connection) -> Result<Statement<'_>> {
     db.prepare("SELECT * FROM seen_wallpapers")
 }
 
+fn make_get_unseen_wallpapers_sql(db: &Connection) -> Result<Statement<'_>> {
+    db.prepare("SELECT * FROM seen_wallpapers WHERE seen = 0")
+}
+
 impl Store {
     pub fn new() -> Result<Store> {
-        let conn = Connection::open_in_memory()?;
+        let conn = if cfg!(test) {
+            Connection::open_in_memory()?
+        } else {
+            let data_dir_path: PathBuf = get_config().data_dir.clone().into();
+            Connection::open(data_dir_path.join("data.sqlite"))?
+        };
         let _ = conn.execute(SETUP_SQL, ())?;
         let store = Store { connection: conn };
         Ok(store)
     }
 
-    pub fn mark_as_seen(&self, wallpaper: &impl Wallpaper) -> Result<(), StoreError> {
-        println!("marking id as seen: {}", wallpaper.get_id());
-        let manager_id: u8 = wallpaper.get_type_id().into();
+    pub fn mark_as_seen(&self, wallpaper: &Wallpaper) -> Result<(), StoreError> {
+        println!("marking id as seen: {}", wallpaper.id);
+        let manager_id: u8 = wallpaper.type_id.into();
 
         let mut stmt = make_mark_sql(
             &self.connection,
-            wallpaper.get_id(),
+            wallpaper.id.as_str(),
             &manager_id.to_string(),
         )
         .map_err(|err| StoreError::UnknownError(err.to_string()))?;
-        let a = stmt
-            .execute([wallpaper.get_id(), &manager_id.to_string()])
+        stmt.execute([wallpaper.id.as_str(), &manager_id.to_string()])
             .map_err(|err| {
                 println!("{:?}", err);
                 StoreError::UpdateFailed
             })?;
 
-        println!("size?: {:?}", a);
         Ok(())
     }
 
-    pub fn have_seen(&self, wallpaper: &impl Wallpaper) -> bool {
+    pub fn have_seen(&self, wallpaper: &Wallpaper) -> bool {
         // TODO: dont eat errors
-        match make_have_seen_sql(&self.connection, wallpaper.get_id()) {
+        match make_have_seen_sql(&self.connection, wallpaper.id.as_str()) {
             Ok(mut stmt) => stmt
-                .query_row([wallpaper.get_id()], |row| row.get::<_, u8>(0))
+                .query_row([wallpaper.id.as_str()], |row| row.get::<_, u8>(0))
                 .is_ok(),
             Err(_) => false,
         }
     }
 
-    pub fn insert_wallpaper(&self, wallpaper: &impl Wallpaper) -> Result<(), StoreError> {
-        let manager_id: u8 = wallpaper.get_type_id().into();
+    pub fn insert_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), StoreError> {
+        let manager_id: u8 = wallpaper.type_id.into();
         make_insert_wallpaper_sql(
             &self.connection,
-            wallpaper.get_id(),
+            wallpaper.id.as_str(),
             &manager_id.to_string(),
         )
         .map_err(|err| StoreError::QueryError(err.to_string()))?
-        .execute([wallpaper.get_id(), &manager_id.to_string()])
+        .execute([wallpaper.id.as_str(), &manager_id.to_string()])
         .map_err(|_| StoreError::InsertFailed)?;
 
         Ok(())
@@ -128,10 +156,23 @@ impl Store {
             })
         })
         .unwrap()
-        .filter_map(|row| {
-            println!("is_ok {:?}", row.is_ok());
-            row.ok()
+        .filter_map(|row| row.ok())
+        .collect::<Vec<_>>()
+    }
+
+    pub fn get_unseen_wallpaperrs(&self) -> Vec<DatabaseWallpaper> {
+        // TODO: dont eat errors
+        let mut stmt =
+            make_get_unseen_wallpapers_sql(&self.connection).expect("failed to make query");
+        stmt.query_map([], |row| {
+            Ok(DatabaseWallpaper {
+                id: row.get::<_, _>(0)?,
+                manager_id: row.get::<_, _>(1)?,
+                seen: row.get::<_, _>(2)?,
+            })
         })
+        .unwrap()
+        .filter_map(|row| row.ok())
         .collect::<Vec<_>>()
     }
 }
@@ -142,7 +183,8 @@ mod tests {
     use std::sync::Once;
 
     use crate::CONFIG;
-    use crate::content_managers::local::LocalWallpaper;
+    use crate::config::Config;
+    use crate::content_managers::ContentManagerTypes;
 
     use super::*;
 
@@ -158,7 +200,7 @@ mod tests {
     fn test_mark_seen() -> Result<(), Box<dyn Error>> {
         setup();
         let store = Store::new()?;
-        let wallpaper = LocalWallpaper::new("test");
+        let wallpaper = Wallpaper::new("test".to_string(), ContentManagerTypes::Local);
 
         let not_seen = store.have_seen(&wallpaper);
         store.mark_as_seen(&wallpaper)?;
@@ -172,7 +214,7 @@ mod tests {
     fn test_insert_wallpaper() -> Result<(), Box<dyn Error>> {
         setup();
         let store = Store::new()?;
-        let wallpaper = LocalWallpaper::new("test");
+        let wallpaper = Wallpaper::new("test".to_string(), ContentManagerTypes::Local);
 
         store.insert_wallpaper(&wallpaper)?;
 

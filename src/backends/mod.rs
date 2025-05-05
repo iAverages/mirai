@@ -11,5 +11,5 @@ pub enum WallpaperBackendError {
 }
 
 pub trait WallpaperBackend {
-    fn set_wallpaper(&self, wallpaper: &impl Wallpaper) -> Result<(), WallpaperBackendError>;
+    fn set_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), WallpaperBackendError>;
 }

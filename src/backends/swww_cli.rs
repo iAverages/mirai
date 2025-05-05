@@ -7,13 +7,19 @@ use super::{WallpaperBackend, WallpaperBackendError};
 /// TEMP cli powered backend because I cannot get the socket to connect
 pub struct SwwCliBackend;
 
+impl SwwCliBackend {
+    pub fn new() -> SwwCliBackend {
+        SwwCliBackend {}
+    }
+}
+
 impl WallpaperBackend for SwwCliBackend {
-    fn set_wallpaper(&self, wallpaper: &impl Wallpaper) -> Result<(), WallpaperBackendError> {
+    fn set_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), WallpaperBackendError> {
         let output = Command::new("swww")
             .args([
                 "img",
                 "--resize=fit",
-                wallpaper.get_wallpaper_on_disk().to_str().unwrap(),
+                wallpaper.get_wallpaper_path().to_str().unwrap(),
             ])
             .output()
             .map_err(|_| WallpaperBackendError::ChangeFailure)?;

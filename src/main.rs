@@ -4,15 +4,18 @@ mod content_managers;
 mod store;
 mod wallpaper;
 
+use self::backends::swww_cli::SwwCliBackend;
 use self::config::Config;
-use self::content_managers::local::{LocalWallpaper, LocalWallpaperManager};
+use self::content_managers::local::LocalContentManager;
 use self::store::Store;
-use self::wallpaper::{Wallpaper, WallpaperContentManager, WallpapersManger};
+use self::wallpaper::WallpapersManager;
 use once_cell::sync::OnceCell;
 use rand::Rng;
 use std::error::Error;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::thread::sleep;
+use std::time::Duration;
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
 pub fn get_config() -> &'static Config {
@@ -23,20 +26,23 @@ fn main() -> Result<(), String> {
     let config = Config::create_config();
     let _ = CONFIG.set(config);
 
-    let store = Store::new().map_err(|err| err.to_string())?;
+    let data_dir_path: PathBuf = get_config().data_dir.clone().into();
+    fs::create_dir_all(data_dir_path).map_err(|err| err.to_string())?;
 
-    let content_manager = LocalWallpaperManager::new();
-    let wallpaper_manager = WallpapersManger::new(&store);
+    let backend = SwwCliBackend::new();
+    let store = Store::new().map_err(|err| err.to_string())?;
+    let content_manager = LocalContentManager::new();
+    let wallpaper_manager = WallpapersManager::new(&store, backend);
     wallpaper_manager
         .store_wallpapers(&content_manager)
         .map_err(|err| err.to_string())?;
 
-    let wallpapers = store.get_inserted_wallpapers();
-    println!("{}", wallpapers.len());
-    for wallpaper in wallpapers {
-        println!("aa: {:?}", wallpaper);
+    loop {
+        wallpaper_manager.set_next_wallpaper();
+        // sleep(Duration::from_secs(60));
+        sleep(Duration::from_secs(10));
     }
 
-    Ok(())
+    // Ok(())
 }
 }
