@@ -14,7 +14,7 @@ use once_cell::sync::OnceCell;
 use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
-use std::time::Duration as StdDuration;
+use std::time::{Duration as StdDuration, SystemTime, UNIX_EPOCH};
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
 pub fn get_config() -> &'static Config {
@@ -41,9 +41,17 @@ fn main() -> Result<(), String> {
         if should_update_wallpaper(get_config().file_config.local.update_interval, last_update) {
             wallpaper_manager.set_next_wallpaper();
         }
-        // sleep(StdDuration::from_secs(60));
-        sleep(StdDuration::from_secs(10));
+        sleep(StdDuration::from_secs(get_seconds_till_minute()));
     }
+}
+
+fn get_seconds_till_minute() -> u64 {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("failed to get duration_since epoch")
+        .as_secs();
+    let seconds = now % 60;
+    60 - seconds
 }
 
 fn should_update_wallpaper(interval: u32, last_run_time: Option<DateTime<Local>>) -> bool {
