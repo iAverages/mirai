@@ -10,10 +10,8 @@ use self::content_managers::local::LocalContentManager;
 use self::store::Store;
 use self::wallpaper::WallpapersManager;
 use once_cell::sync::OnceCell;
-use rand::Rng;
-use std::error::Error;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -42,7 +40,4 @@ fn main() -> Result<(), String> {
         // sleep(Duration::from_secs(60));
         sleep(Duration::from_secs(10));
     }
-
-    // Ok(())
-}
 }

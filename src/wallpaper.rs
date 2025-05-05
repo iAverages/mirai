@@ -1,5 +1,5 @@
 use rand::Rng;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use thiserror::Error;
 
@@ -43,10 +43,17 @@ impl<'a> WallpapersManager<'a> {
     }
 
     pub fn set_next_wallpaper(&self) {
-        let unseen_wallpapers = self.store.get_unseen_wallpaperrs();
+        let mut unseen_wallpapers = self.store.get_unseen_wallpaperrs();
 
         if unseen_wallpapers.is_empty() {
-            todo!()
+            println!("all wallpapers have been seen, resetting seen state");
+            self.store.reset_seen_state();
+            unseen_wallpapers = self.store.get_unseen_wallpaperrs();
+        }
+
+        if unseen_wallpapers.is_empty() {
+            println!("no wallpapers found in internal store");
+            return;
         }
 
         let mut rng = rand::rng();
@@ -57,8 +64,9 @@ impl<'a> WallpapersManager<'a> {
             .clone()
             .try_into()
             .expect("database has unsupported manager id. this is a bug");
-        let _ = self.backend.set_wallpaper(&next_wallpaper);
-        // TODO: set next_wallpaper as seen
+        // TODO: handle errors
+        self.backend.set_wallpaper(&next_wallpaper).unwrap();
+        self.store.mark_as_seen(&next_wallpaper).unwrap();
     }
 }
 

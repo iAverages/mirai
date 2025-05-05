@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::path::PathBuf;
 
 use rusqlite::{Connection, Result, Statement, prepare_and_bind};
@@ -76,7 +75,6 @@ fn make_insert_wallpaper_sql<'a>(
         "INSERT INTO seen_wallpapers (id, seen, manager_id)
          VALUES (:id, 0, :manager_id)
          ON CONFLICT(id) DO UPDATE SET
-         seen = excluded.seen,
          manager_id = excluded.manager_id;"
     ))
 }
@@ -121,6 +119,7 @@ impl Store {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn have_seen(&self, wallpaper: &Wallpaper) -> bool {
         // TODO: dont eat errors
         match make_have_seen_sql(&self.connection, wallpaper.id.as_str()) {
@@ -145,6 +144,7 @@ impl Store {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_inserted_wallpapers(&self) -> Vec<DatabaseWallpaper> {
         // TODO: dont eat errors
         let mut stmt = make_get_all_wallpapers_sql(&self.connection).expect("failed to make query");
@@ -175,6 +175,12 @@ impl Store {
         .filter_map(|row| row.ok())
         .collect::<Vec<_>>()
     }
+
+    pub fn reset_seen_state(&self) {
+        self.connection
+            .execute("UPDATE seen_wallpapers SET seen = 0", [])
+            .expect("failed to reset seen status");
+    }
 }
 
 #[cfg(test)]
@@ -200,13 +206,21 @@ mod tests {
     fn test_mark_seen() -> Result<(), Box<dyn Error>> {
         setup();
         let store = Store::new()?;
-        let wallpaper = Wallpaper::new("test".to_string(), ContentManagerTypes::Local);
+        let wallpaper1 = Wallpaper::new("test".to_string(), ContentManagerTypes::Local);
+        let wallpaper2 = Wallpaper::new("test2".to_string(), ContentManagerTypes::Local);
 
-        let not_seen = store.have_seen(&wallpaper);
-        store.mark_as_seen(&wallpaper)?;
-        let now_seen = store.have_seen(&wallpaper);
-        assert!(!not_seen);
-        assert!(now_seen);
+        let not_seen1 = store.have_seen(&wallpaper1);
+        let not_seen2 = store.have_seen(&wallpaper2);
+
+        store.mark_as_seen(&wallpaper1)?;
+        let now_seen1 = store.have_seen(&wallpaper1);
+        let still_not_seen2 = store.have_seen(&wallpaper2);
+
+        assert!(!not_seen1);
+        assert!(!not_seen2);
+
+        assert!(now_seen1);
+        assert!(!still_not_seen2);
         Ok(())
     }
 
