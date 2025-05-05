@@ -22,7 +22,7 @@ in {
         Restart = "always";
       };
       Install = {
-        WantedBy = ["graphical-session.target"];
+        WantedBy = ["default.target"];
       };
     };
   };
