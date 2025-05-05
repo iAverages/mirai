@@ -4,4 +4,4 @@ wallpaper manager for swww
 
 ## features
 
-- [ ] automatic wallpaper selection on schedule
+- [x] automatic wallpaper selection on schedule
