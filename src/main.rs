@@ -9,12 +9,12 @@ use self::config::Config;
 use self::content_managers::local::LocalContentManager;
 use self::store::Store;
 use self::wallpaper::WallpapersManager;
-use chrono::{DateTime, Datelike, Duration, Local, TimeZone};
+use chrono::{DateTime, Datelike, Local, TimeZone};
 use once_cell::sync::OnceCell;
 use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
-use std::time::{Duration as StdDuration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
 pub fn get_config() -> &'static Config {
@@ -41,7 +41,7 @@ fn main() -> Result<(), String> {
         if should_update_wallpaper(get_config().file_config.local.update_interval, last_update) {
             wallpaper_manager.set_next_wallpaper();
         }
-        sleep(StdDuration::from_secs(get_seconds_till_minute()));
+        sleep(Duration::from_secs(get_seconds_till_minute()));
     }
 }
 
