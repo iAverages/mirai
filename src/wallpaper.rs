@@ -73,7 +73,22 @@ impl<'a> WallpapersManager<'a> {
         // TODO: handle errors
         self.backend.set_wallpaper(&next_wallpaper).unwrap();
         self.store.mark_as_seen(&next_wallpaper).unwrap();
+        self.store.set_last_used(&next_wallpaper);
         self.store.update_last_run();
+    }
+
+    pub fn set_last_wallpaper(&self) {
+        let Some(meta) = self.store.get_meta() else {
+            return;
+        };
+        let Some(db_wallpaper) = self.store.get_wallpaper(&meta.last_used) else {
+            return;
+        };
+
+        let wallpaper = db_wallpaper
+            .try_into()
+            .expect("failed to get wallpaper from db wallpaper");
+        self.backend.set_wallpaper(&wallpaper).unwrap();
     }
 }
 

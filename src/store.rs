@@ -25,6 +25,7 @@ pub struct Store {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct DatabaseWallpaper {
     pub id: String,
     pub seen: bool,
@@ -52,7 +53,8 @@ static SETUP_SEEN_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS seen_wallpapers 
 
 static SETUP_META_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS meta (
            id INTEGER PRIMARY KEY,
-           last_update datetime
+           last_update datetime,
+           last_used TEXT
         )";
 
 fn make_have_seen_sql<'a>(db: &'a Connection, path: &str) -> Result<Statement<'a>> {
@@ -103,6 +105,15 @@ fn make_last_run_sql<'a>(db: &'a Connection, now: &DateTime<Local>) -> Result<St
         "INSERT INTO meta (id, last_update)
         VALUES (1, :now)
         ON CONFLICT(id) DO UPDATE SET last_update = excluded.last_update"
+    ))
+}
+
+fn make_last_used_sql<'a>(db: &'a Connection, id: &String) -> Result<Statement<'a>> {
+    Ok(prepare_and_bind!(
+        db,
+        "INSERT INTO meta (id, last_used)
+        VALUES (1, :id)
+        ON CONFLICT(id) DO UPDATE SET last_used = excluded.last_used"
     ))
 }
 
@@ -217,6 +228,47 @@ impl Store {
             .execute([now])
             .expect("failed to update last run");
     }
+
+    pub fn set_last_used(&self, wallpaper: &Wallpaper) {
+        tracing::info!("updating last used wallpaper to {}", &wallpaper.id);
+        make_last_used_sql(&self.connection, &wallpaper.id)
+            .expect("failed to create query")
+            .execute([&wallpaper.id])
+            .expect("failed to update last run");
+    }
+
+    pub fn get_meta(&self) -> Option<Meta> {
+        self.connection
+            .query_row("SELECT last_update, last_used FROM meta", [], |row| {
+                Ok(Meta {
+                    last_update: row.get::<_, DateTime<Local>>(0)?,
+                    last_used: row.get::<_, String>(1)?,
+                })
+            })
+            .ok()
+    }
+    pub fn get_wallpaper(&self, id: &str) -> Option<DatabaseWallpaper> {
+        let manager_id: u8 = get_config().file_config.content_manager_type.into();
+        self.connection
+            .query_row(
+                "SELECT id, seen, manager_id from seen_wallpapers WHERE id = ? AND manager_id = ?",
+                [id, manager_id.to_string().as_str()],
+                |row| {
+                    Ok(DatabaseWallpaper {
+                        id: row.get::<_, _>(0)?,
+                        seen: row.get::<_, _>(1)?,
+                        manager_id: row.get::<_, _>(2)?,
+                    })
+                },
+            )
+            .ok()
+    }
+}
+
+pub struct Meta {
+    #[allow(dead_code)]
+    pub last_update: DateTime<Local>,
+    pub last_used: String,
 }
 
 #[cfg(test)]
