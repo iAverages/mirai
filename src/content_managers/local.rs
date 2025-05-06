@@ -10,6 +10,10 @@ pub struct LocalContentManager;
 
 impl LocalContentManager {
     pub fn new() -> LocalContentManager {
+        tracing::info!(
+            "using local content manager {}",
+            get_config().file_config.local.location.clone()
+        );
         LocalContentManager {}
     }
 }
@@ -21,10 +25,9 @@ impl WallpaperContentManager for LocalContentManager {
             .filter_map(Result::ok)
             .filter(|entry| entry.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             .map(|path| {
-                Wallpaper::new(
-                    path.file_name().to_string_lossy().to_string(),
-                    ContentManagerTypes::Local,
-                )
+                let file_path = path.file_name().to_string_lossy().to_string();
+                tracing::trace!("found {}", file_path);
+                Wallpaper::new(file_path, ContentManagerTypes::Local)
             })
             .collect::<Vec<_>>()
     }

@@ -4,6 +4,7 @@ use std::path::Path;
 
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use tracing::Level;
 
 use crate::content_managers::ContentManagerTypes;
 
@@ -24,6 +25,7 @@ impl Display for Config {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FileConfig {
+    pub log_level: Option<LogLevel>,
     pub content_manager_type: ContentManagerTypes,
     pub local: LocalWallpaperConfig,
 }
@@ -33,6 +35,52 @@ impl Default for FileConfig {
         FileConfig {
             content_manager_type: ContentManagerTypes::Local,
             local: LocalWallpaperConfig::default(),
+            log_level: None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LogLevel(pub Level);
+
+impl LogLevel {
+    pub fn inner(&self) -> Level {
+        self.0
+    }
+}
+
+impl Serialize for LogLevel {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let level_str = match self.0 {
+            Level::TRACE => "trace",
+            Level::DEBUG => "debug",
+            Level::INFO => "info",
+            Level::WARN => "warn",
+            Level::ERROR => "error",
+        };
+        serializer.serialize_str(level_str)
+    }
+}
+
+impl<'de> Deserialize<'de> for LogLevel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.to_lowercase().as_str() {
+            "trace" => Ok(LogLevel(Level::TRACE)),
+            "debug" => Ok(LogLevel(Level::DEBUG)),
+            "info" => Ok(LogLevel(Level::INFO)),
+            "warn" => Ok(LogLevel(Level::WARN)),
+            "error" => Ok(LogLevel(Level::ERROR)),
+            _ => Err(serde::de::Error::custom(format!(
+                "Unknown log level: {}",
+                s
+            ))),
         }
     }
 }

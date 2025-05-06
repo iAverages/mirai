@@ -5,7 +5,7 @@ mod store;
 mod wallpaper;
 
 use self::backends::swww_cli::SwwCliBackend;
-use self::config::Config;
+use self::config::{Config, LogLevel};
 use self::content_managers::local::LocalContentManager;
 use self::store::Store;
 use self::wallpaper::WallpapersManager;
@@ -15,6 +15,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tracing::Level;
 
 static CONFIG: OnceCell<Config> = OnceCell::new();
 pub fn get_config() -> &'static Config {
@@ -25,7 +26,17 @@ fn main() -> Result<(), String> {
     let config = Config::create_config();
     let _ = CONFIG.set(config);
 
+    let log_level = get_config().file_config.log_level;
+    let log_level = log_level.unwrap_or(LogLevel(Level::INFO));
+    tracing_subscriber::fmt()
+        .with_max_level(log_level.inner())
+        .init();
+
+    tracing::info!("starting mirai");
+
     let data_dir_path: PathBuf = get_config().data_dir.clone().into();
+    let data_dir_str = data_dir_path.to_str().unwrap_or("N/A");
+    tracing::debug!("creating data directory {}", data_dir_str);
     fs::create_dir_all(data_dir_path).map_err(|err| err.to_string())?;
 
     let backend = SwwCliBackend::new();

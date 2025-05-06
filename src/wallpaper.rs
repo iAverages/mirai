@@ -34,6 +34,10 @@ impl<'a> WallpapersManager<'a> {
     ) -> Result<(), WallpapersMangerError> {
         let wallpapers = content_manager.get_wallpapers();
         for wallpaper in wallpapers {
+            tracing::trace!(
+                "inserting wallpaper {} to store",
+                wallpaper.get_wallpaper_path().display()
+            );
             self.store
                 .insert_wallpaper(&wallpaper)
                 .map_err(|_| WallpapersMangerError::DatabaseInsertError)?;
@@ -43,16 +47,18 @@ impl<'a> WallpapersManager<'a> {
     }
 
     pub fn set_next_wallpaper(&self) {
+        tracing::debug!("setting next wallpaper");
         let mut unseen_wallpapers = self.store.get_unseen_wallpaperrs();
+        tracing::debug!("{} unseen wallpapers", unseen_wallpapers.len());
 
         if unseen_wallpapers.is_empty() {
-            println!("all wallpapers have been seen, resetting seen state");
+            tracing::info!("all wallpapers have been seen, resetting seen state");
             self.store.reset_seen_state();
             unseen_wallpapers = self.store.get_unseen_wallpaperrs();
         }
 
         if unseen_wallpapers.is_empty() {
-            println!("no wallpapers found in internal store");
+            tracing::info!("no wallpapers found in internal store");
             return;
         }
 

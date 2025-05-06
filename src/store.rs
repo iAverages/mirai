@@ -121,7 +121,7 @@ impl Store {
     }
 
     pub fn mark_as_seen(&self, wallpaper: &Wallpaper) -> Result<(), StoreError> {
-        println!("marking id as seen: {}", wallpaper.id);
+        tracing::info!("marking id as seen: {}", wallpaper.id);
         let manager_id: u8 = wallpaper.type_id.into();
 
         let mut stmt = make_mark_sql(
@@ -132,7 +132,7 @@ impl Store {
         .map_err(|err| StoreError::UnknownError(err.to_string()))?;
         stmt.execute([wallpaper.id.as_str(), &manager_id.to_string()])
             .map_err(|err| {
-                println!("{:?}", err);
+                tracing::error!("{:?}", err);
                 StoreError::UpdateFailed
             })?;
 
@@ -211,6 +211,7 @@ impl Store {
 
     pub fn update_last_run(&self) {
         let now = Local::now();
+        tracing::info!("updating last run to {}", now);
         make_last_run_sql(&self.connection, &now)
             .expect("failed to create query")
             .execute([now])
