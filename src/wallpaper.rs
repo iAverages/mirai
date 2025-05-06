@@ -1,5 +1,7 @@
 use rand::Rng;
 use std::path::PathBuf;
+use std::thread::sleep;
+use std::time::Duration;
 
 use thiserror::Error;
 
@@ -88,7 +90,22 @@ impl<'a> WallpapersManager<'a> {
         let wallpaper = db_wallpaper
             .try_into()
             .expect("failed to get wallpaper from db wallpaper");
-        self.backend.set_wallpaper(&wallpaper).unwrap();
+        let mut times = 0;
+        loop {
+            if self.backend.set_wallpaper(&wallpaper).is_ok() {
+                return;
+            };
+
+            if times > 5 {
+                panic!(
+                    "failed to set wallpaper 5 times, please make sure your chosen backend is available",
+                );
+            }
+
+            times += 1;
+            tracing::warn!("failed to set wallpaper, retrying in 5 seconds");
+            sleep(Duration::from_secs(5));
+        }
     }
 }
 
