@@ -30,6 +30,7 @@
 
           devShells.default = mkShell {
             packages = [
+              openssl
               pkg-config
               rust
               lz4
