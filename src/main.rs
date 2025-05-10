@@ -4,7 +4,10 @@ mod content_managers;
 mod store;
 mod wallpaper;
 
+#[cfg(not(target_os = "windows"))]
 use self::backends::swww_cli::SwwCliBackend;
+#[cfg(target_os = "windows")]
+use self::backends::windows::Windows;
 use self::config::{Config, LogLevel};
 use self::content_managers::local::LocalContentManager;
 use self::store::Store;
@@ -39,7 +42,11 @@ fn main() -> Result<(), String> {
     tracing::debug!("creating data directory {}", data_dir_str);
     fs::create_dir_all(data_dir_path).map_err(|err| err.to_string())?;
 
+    #[cfg(target_os = "windows")]
+    let backend = Windows::new();
+    #[cfg(not(target_os = "windows"))]
     let backend = SwwCliBackend::new();
+
     let store = Store::new().map_err(|err| err.to_string())?;
     let content_manager = LocalContentManager::new();
     let wallpaper_manager = WallpapersManager::new(&store, backend);
