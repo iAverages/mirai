@@ -10,6 +10,9 @@ in
     inherit (cargoToml.package) version;
 
     cargoLock.lockFile = ../Cargo.lock;
+    cargoLock.outputHashes = {
+      "common-0.9.5-masterV3" = "sha256-h+hBelFhaf3NIwjxBjUWco+hhvO5xwzdcWaPtBWWweI=";
+    };
 
     src = lib.cleanSourceWith {
       src = ../.;
