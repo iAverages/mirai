@@ -7,8 +7,24 @@ use thiserror::Error;
 
 use crate::backends::WallpaperBackend;
 use crate::content_managers::ContentManagerTypes;
+use crate::content_managers::git::GitContentManager;
+use crate::content_managers::local::LocalContentManager;
 use crate::get_config;
 use crate::store::Store;
+
+pub enum ContentManager {
+    Git(GitContentManager),
+    Local(LocalContentManager),
+}
+
+impl WallpaperContentManager for ContentManager {
+    fn get_wallpapers(&self) -> Vec<Wallpaper> {
+        match self {
+            ContentManager::Git(manager) => manager.get_wallpapers(),
+            ContentManager::Local(manager) => manager.get_wallpapers(),
+        }
+    }
+}
 
 pub struct WallpapersManager<'a> {
     store: &'a Store,
@@ -126,8 +142,13 @@ impl Wallpaper {
     }
 
     pub fn get_wallpaper_path(&self) -> PathBuf {
-        let config = get_config();
-        let wallpaper_path = PathBuf::from(config.file_config.local.location.clone());
-        wallpaper_path.join(self.id.clone())
+        match self.type_id {
+            ContentManagerTypes::Local => {
+                let config = get_config();
+                let wallpaper_path = PathBuf::from(config.file_config.local.location.clone());
+                wallpaper_path.join(self.id.clone())
+            }
+            ContentManagerTypes::Git => GitContentManager::get_temp_file(&self.id),
+        }
     }
 }
