@@ -36,11 +36,7 @@ impl TryInto<Wallpaper> for DatabaseWallpaper {
     type Error = ();
 
     fn try_into(self) -> Result<Wallpaper, Self::Error> {
-        let manager_id = match self.manager_id {
-            0 => Some(ContentManagerTypes::Local),
-            _ => None,
-        }
-        .ok_or(())?;
+        let manager_id: ContentManagerTypes = self.manager_id.try_into()?;
         Ok(Wallpaper::new(self.id, manager_id))
     }
 }

@@ -1,7 +1,7 @@
 use std::fs;
 
 use crate::get_config;
-use crate::wallpaper::{Wallpaper, WallpaperContentManager};
+use crate::wallpaper::{Wallpaper, WallpaperContentManager, WallpaperContentManagerError};
 
 use super::ContentManagerTypes;
 
@@ -19,16 +19,18 @@ impl LocalContentManager {
 }
 
 impl WallpaperContentManager for LocalContentManager {
-    fn get_wallpapers(&self) -> Vec<Wallpaper> {
-        fs::read_dir(get_config().file_config.local.location.clone())
-            .unwrap()
-            .filter_map(Result::ok)
-            .filter(|entry| entry.file_type().map(|ft| ft.is_file()).unwrap_or(false))
-            .map(|path| {
-                let file_path = path.file_name().to_string_lossy().to_string();
-                tracing::trace!("found {}", file_path);
-                Wallpaper::new(file_path, ContentManagerTypes::Local)
-            })
-            .collect::<Vec<_>>()
+    fn get_wallpapers(&self) -> Result<Vec<Wallpaper>, WallpaperContentManagerError> {
+        Ok(
+            fs::read_dir(get_config().file_config.local.location.clone())
+                .map_err(|_| WallpaperContentManagerError::Failure)?
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+                .map(|path| {
+                    let file_path = path.file_name().to_string_lossy().to_string();
+                    tracing::trace!("found {}", file_path);
+                    Wallpaper::new(file_path, ContentManagerTypes::Local)
+                })
+                .collect::<Vec<_>>(),
+        )
     }
 }

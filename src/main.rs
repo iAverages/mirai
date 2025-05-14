@@ -6,9 +6,11 @@ mod wallpaper;
 
 use self::backends::swww_cli::SwwCliBackend;
 use self::config::{Config, LogLevel};
+use self::content_managers::ContentManagerTypes;
+use self::content_managers::git::GitContentManager;
 use self::content_managers::local::LocalContentManager;
 use self::store::Store;
-use self::wallpaper::WallpapersManager;
+use self::wallpaper::{ContentManager, WallpapersManager};
 use chrono::{DateTime, Datelike, Local, TimeZone};
 use once_cell::sync::OnceCell;
 use std::fs;
@@ -39,9 +41,9 @@ fn main() -> Result<(), String> {
     tracing::debug!("creating data directory {}", data_dir_str);
     fs::create_dir_all(data_dir_path).map_err(|err| err.to_string())?;
 
-    let backend = SwwCliBackend::new();
+    let backend = get_backend();
     let store = Store::new().map_err(|err| err.to_string())?;
-    let content_manager = LocalContentManager::new();
+    let content_manager = get_content_manager();
     let wallpaper_manager = WallpapersManager::new(&store, backend);
     wallpaper_manager
         .store_wallpapers(&content_manager)
@@ -55,6 +57,17 @@ fn main() -> Result<(), String> {
         }
         sleep(Duration::from_secs(get_seconds_till_minute()));
     }
+}
+
+fn get_content_manager() -> ContentManager {
+    match get_config().file_config.content_manager_type {
+        ContentManagerTypes::Git => ContentManager::Git(GitContentManager::new()),
+        ContentManagerTypes::Local => ContentManager::Local(LocalContentManager::new()),
+    }
+}
+
+fn get_backend() -> SwwCliBackend {
+    SwwCliBackend::new()
 }
 
 fn get_seconds_till_minute() -> u64 {
