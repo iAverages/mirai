@@ -1,0 +1,10 @@
+name: "Build"
+
+on:
+  pull_request:
+  push:
+    tags-ignore:
+      - 'v*'
+jobs:
+  build:
+    uses: ./.github/workflows/build-bin.yaml
