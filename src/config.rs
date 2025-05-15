@@ -28,6 +28,7 @@ pub struct FileConfig {
     pub log_level: Option<LogLevel>,
     pub content_manager_type: ContentManagerTypes,
     pub local: LocalWallpaperConfig,
+    pub git: GitWallpaperConfig,
 }
 
 impl Default for FileConfig {
@@ -36,6 +37,7 @@ impl Default for FileConfig {
             content_manager_type: ContentManagerTypes::Local,
             local: LocalWallpaperConfig::default(),
             log_level: None,
+            git: GitWallpaperConfig::default(),
         }
     }
 }
@@ -105,6 +107,21 @@ impl Default for LocalWallpaperConfig {
         LocalWallpaperConfig {
             location: "".to_string(),
             update_interval: 1440,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct GitWallpaperConfig {
+    pub url: String,
+    pub path: Option<String>,
+}
+
+impl Default for GitWallpaperConfig {
+    fn default() -> Self {
+        GitWallpaperConfig {
+            url: "".to_string(),
+            path: Some("".to_string()),
         }
     }
 }

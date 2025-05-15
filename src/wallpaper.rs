@@ -7,8 +7,30 @@ use thiserror::Error;
 
 use crate::backends::WallpaperBackend;
 use crate::content_managers::ContentManagerTypes;
+use crate::content_managers::git::GitContentManager;
+use crate::content_managers::local::LocalContentManager;
 use crate::get_config;
 use crate::store::Store;
+
+#[derive(Debug, thiserror::Error)]
+pub enum WallpaperContentManagerError {
+    #[error("failed to get wallpapers")]
+    Failure,
+}
+
+pub enum ContentManager {
+    Git(GitContentManager),
+    Local(LocalContentManager),
+}
+
+impl WallpaperContentManager for ContentManager {
+    fn get_wallpapers(&self) -> Result<Vec<Wallpaper>, WallpaperContentManagerError> {
+        match self {
+            ContentManager::Git(manager) => manager.get_wallpapers(),
+            ContentManager::Local(manager) => manager.get_wallpapers(),
+        }
+    }
+}
 
 pub struct WallpapersManager<'a> {
     store: &'a Store,
@@ -16,7 +38,7 @@ pub struct WallpapersManager<'a> {
 }
 
 pub trait WallpaperContentManager {
-    fn get_wallpapers(&self) -> Vec<Wallpaper>;
+    fn get_wallpapers(&self) -> Result<Vec<Wallpaper>, WallpaperContentManagerError>;
 }
 
 impl<'a> WallpapersManager<'a> {
@@ -34,12 +56,11 @@ impl<'a> WallpapersManager<'a> {
         &self,
         content_manager: &impl WallpaperContentManager,
     ) -> Result<(), WallpapersMangerError> {
-        let wallpapers = content_manager.get_wallpapers();
+        let wallpapers = content_manager
+            .get_wallpapers()
+            .map_err(|_| WallpapersMangerError::GetWallpaperError)?;
         for wallpaper in wallpapers {
-            tracing::trace!(
-                "inserting wallpaper {} to store",
-                wallpaper.get_wallpaper_path().display()
-            );
+            tracing::trace!("inserting wallpaper {} to store", wallpaper.id,);
             self.store
                 .insert_wallpaper(&wallpaper)
                 .map_err(|_| WallpapersMangerError::DatabaseInsertError)?;
@@ -113,6 +134,8 @@ impl<'a> WallpapersManager<'a> {
 pub enum WallpapersMangerError {
     #[error("failed to add wallpaper to internal database")]
     DatabaseInsertError,
+    #[error("failed to get list of wallpapers")]
+    GetWallpaperError,
 }
 
 pub struct Wallpaper {
@@ -125,9 +148,14 @@ impl Wallpaper {
         Wallpaper { id, type_id }
     }
 
-    pub fn get_wallpaper_path(&self) -> PathBuf {
-        let config = get_config();
-        let wallpaper_path = PathBuf::from(config.file_config.local.location.clone());
-        wallpaper_path.join(self.id.clone())
+    pub fn get_wallpaper_path(&self) -> Result<PathBuf, ()> {
+        match self.type_id {
+            ContentManagerTypes::Local => {
+                let config = get_config();
+                let wallpaper_path = PathBuf::from(config.file_config.local.location.clone());
+                Ok(wallpaper_path.join(self.id.clone()))
+            }
+            ContentManagerTypes::Git => GitContentManager::get_temp_file(&self.id),
+        }
     }
 }
