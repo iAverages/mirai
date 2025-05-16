@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use chrono::{DateTime, Local};
-use rusqlite::{Connection, Result, Statement, prepare_and_bind};
+use rusqlite::{Connection, Error, Result, Row, Statement, prepare_and_bind};
+use sea_query::{Expr, Iden, OnConflict, Query, SqliteQueryBuilder};
+use sea_query_rusqlite::RusqliteBinder;
 use thiserror::Error;
 
 use crate::content_managers::ContentManagerTypes;
@@ -10,14 +12,10 @@ use crate::wallpaper::Wallpaper;
 
 #[derive(Debug, Error)]
 pub enum StoreError {
-    #[error("an error occured while generating query")]
-    QueryError(String),
     #[error("failed to insert into store")]
     InsertFailed,
     #[error("failed to update row in store")]
     UpdateFailed,
-    #[error("unknown error: {0}")]
-    UnknownError(String),
 }
 
 pub struct Store {
@@ -30,6 +28,16 @@ pub struct DatabaseWallpaper {
     pub id: String,
     pub seen: bool,
     pub manager_id: u8,
+}
+
+impl From<&Row<'_>> for DatabaseWallpaper {
+    fn from(row: &Row) -> Self {
+        Self {
+            id: row.get_unwrap("id"),
+            seen: row.get_unwrap("seen"),
+            manager_id: row.get_unwrap("manager_id"),
+        }
+    }
 }
 
 impl TryInto<Wallpaper> for DatabaseWallpaper {
@@ -53,64 +61,28 @@ static SETUP_META_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS meta (
            last_used TEXT
         )";
 
-fn make_have_seen_sql<'a>(db: &'a Connection, path: &str) -> Result<Statement<'a>> {
-    Ok(prepare_and_bind!(
-        db,
-        "SELECT 1 FROM seen_wallpapers WHERE id = :path"
-    ))
+#[derive(Iden)]
+enum SeenWallpapers {
+    Table,
+    Id,
+    Seen,
+    ManagerId,
 }
 
-fn make_mark_sql<'a>(db: &'a Connection, id: &str, manager_id: &str) -> Result<Statement<'a>> {
-    Ok(prepare_and_bind!(
-        db,
-        "INSERT INTO seen_wallpapers (id, seen, manager_id)
-        VALUES (:id, 1, :manager_id)
-        ON CONFLICT(id) DO UPDATE SET seen = 1"
-    ))
+#[derive(Iden)]
+enum Meta {
+    Table,
+    Id,
+    LastUpdate,
+    LastUsed,
 }
 
-fn make_insert_wallpaper_sql<'a>(
-    db: &'a Connection,
-    id: &str,
-    manager_id: &str,
-) -> Result<Statement<'a>> {
-    Ok(prepare_and_bind!(
-        db,
-        "INSERT INTO seen_wallpapers (id, seen, manager_id)
-         VALUES (:id, 0, :manager_id)
-         ON CONFLICT(id) DO UPDATE SET
-         manager_id = excluded.manager_id;"
-    ))
-}
-
-fn make_get_all_wallpapers_sql(db: &Connection) -> Result<Statement<'_>> {
-    db.prepare("SELECT * FROM seen_wallpapers")
-}
-
-fn make_get_unseen_wallpapers_sql(db: &Connection) -> Result<Statement<'_>> {
-    db.prepare("SELECT * FROM seen_wallpapers WHERE seen = 0")
-}
-
-fn make_last_update_sql(db: &Connection) -> Result<Statement<'_>> {
-    db.prepare("SELECT last_update FROM meta")
-}
-
-fn make_last_run_sql<'a>(db: &'a Connection, now: &DateTime<Local>) -> Result<Statement<'a>> {
-    Ok(prepare_and_bind!(
-        db,
-        "INSERT INTO meta (id, last_update)
-        VALUES (1, :now)
-        ON CONFLICT(id) DO UPDATE SET last_update = excluded.last_update"
-    ))
-}
-
-fn make_last_used_sql<'a>(db: &'a Connection, id: &String) -> Result<Statement<'a>> {
-    Ok(prepare_and_bind!(
-        db,
-        "INSERT INTO meta (id, last_used)
-        VALUES (1, :id)
-        ON CONFLICT(id) DO UPDATE SET last_used = excluded.last_used"
-    ))
+fn log_query_error(err: &Error) {
+    if rusqlite::Error::QueryReturnedNoRows == *err {
+        tracing::trace!("query returned no rows");
+    } else {
+        tracing::error!("query error: {}", err);
+    }
 }
 
 impl Store {
@@ -131,139 +103,252 @@ impl Store {
         tracing::info!("marking id as seen: {}", wallpaper.id);
         let manager_id: u8 = wallpaper.type_id.into();
 
-        let mut stmt = make_mark_sql(
-            &self.connection,
-            wallpaper.id.as_str(),
-            &manager_id.to_string(),
-        )
-        .map_err(|err| StoreError::UnknownError(err.to_string()))?;
-        stmt.execute([wallpaper.id.as_str(), &manager_id.to_string()])
-            .map_err(|err| {
-                tracing::error!("{:?}", err);
-                StoreError::UpdateFailed
-            })?;
+        let (sql, values) = Query::insert()
+            .into_table(SeenWallpapers::Table)
+            .columns([
+                SeenWallpapers::Id,
+                SeenWallpapers::Seen,
+                SeenWallpapers::ManagerId,
+            ])
+            .values_panic([(&wallpaper.id).into(), 1.into(), manager_id.into()])
+            .on_conflict(
+                OnConflict::column(SeenWallpapers::Id)
+                    .update_column(SeenWallpapers::Seen)
+                    .to_owned(),
+            )
+            .build_rusqlite(SqliteQueryBuilder);
+
+        self.connection
+            .execute(sql.as_str(), &*values.as_params())
+            .inspect_err(log_query_error)
+            .map_err(|_| StoreError::UpdateFailed)?;
 
         Ok(())
     }
 
     #[allow(dead_code)]
     pub fn have_seen(&self, wallpaper: &Wallpaper) -> bool {
-        // TODO: dont eat errors
-        match make_have_seen_sql(&self.connection, wallpaper.id.as_str()) {
-            Ok(mut stmt) => stmt
-                .query_row([wallpaper.id.as_str()], |row| row.get::<_, u8>(0))
-                .is_ok(),
-            Err(_) => false,
+        let (sql, values) = Query::select()
+            .column(SeenWallpapers::Id)
+            .from(SeenWallpapers::Table)
+            .and_where(Expr::col(SeenWallpapers::Id).eq(wallpaper.id.as_str()))
+            .and_where(Expr::col(SeenWallpapers::Seen).eq(1))
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let stmt = self.connection.prepare(sql.as_str()).inspect_err(|err| {
+            tracing::error!("error preparing query: {}", err);
+        });
+        if let Ok(mut stmt) = stmt {
+            return stmt
+                .query_row(&*values.as_params(), |row| row.get::<_, String>(0))
+                .inspect_err(log_query_error)
+                .is_ok();
         }
+
+        false
     }
 
     pub fn insert_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), StoreError> {
         let manager_id: u8 = wallpaper.type_id.into();
-        make_insert_wallpaper_sql(
-            &self.connection,
-            wallpaper.id.as_str(),
-            &manager_id.to_string(),
-        )
-        .map_err(|err| StoreError::QueryError(err.to_string()))?
-        .execute([wallpaper.id.as_str(), &manager_id.to_string()])
-        .map_err(|_| StoreError::InsertFailed)?;
+
+        let (sql, values) = Query::insert()
+            .into_table(SeenWallpapers::Table)
+            .columns([
+                SeenWallpapers::Id,
+                SeenWallpapers::Seen,
+                SeenWallpapers::ManagerId,
+            ])
+            .values_panic([(&wallpaper.id).into(), 0.into(), manager_id.into()])
+            .on_conflict(
+                OnConflict::column(SeenWallpapers::Id)
+                    // TODO: make primary key for this table a composite key with id:manager_id
+                    .update_column(SeenWallpapers::ManagerId)
+                    .to_owned(),
+            )
+            .build_rusqlite(SqliteQueryBuilder);
+
+        self.connection
+            .execute(sql.as_str(), &*values.as_params())
+            .inspect_err(log_query_error)
+            .map_err(|_| StoreError::InsertFailed)?;
 
         Ok(())
     }
 
     #[allow(dead_code)]
     pub fn get_inserted_wallpapers(&self) -> Vec<DatabaseWallpaper> {
-        // TODO: dont eat errors
-        let mut stmt = make_get_all_wallpapers_sql(&self.connection).expect("failed to make query");
-        stmt.query_map([], |row| {
-            Ok(DatabaseWallpaper {
-                id: row.get::<_, _>(0)?,
-                manager_id: row.get::<_, _>(1)?,
-                seen: row.get::<_, _>(2)?,
-            })
-        })
-        .unwrap()
-        .filter_map(|row| row.ok())
-        .collect::<Vec<_>>()
+        let (sql, _) = Query::select()
+            .from(SeenWallpapers::Table)
+            .columns([
+                SeenWallpapers::Id,
+                SeenWallpapers::ManagerId,
+                SeenWallpapers::Seen,
+            ])
+            .build_rusqlite(SqliteQueryBuilder);
+        let stmt = self.connection.prepare(sql.as_str()).inspect_err(|err| {
+            tracing::error!("error preparing query: {}", err);
+        });
+
+        if let Ok(mut stmt) = stmt {
+            return stmt
+                .query_map([], |row| Ok(DatabaseWallpaper::from(row)))
+                .inspect_err(log_query_error)
+                .unwrap() // TODO: dont unwrap
+                .filter_map(|row| match row {
+                    Ok(row) => Some(row),
+                    Err(error) => {
+                        tracing::error!("got error from insert: {}", error);
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+        }
+
+        vec![]
     }
 
     pub fn get_unseen_wallpaperrs(&self) -> Vec<DatabaseWallpaper> {
-        // TODO: dont eat errors
-        let mut stmt =
-            make_get_unseen_wallpapers_sql(&self.connection).expect("failed to make query");
-        stmt.query_map([], |row| {
-            Ok(DatabaseWallpaper {
-                id: row.get::<_, _>(0)?,
-                manager_id: row.get::<_, _>(1)?,
-                seen: row.get::<_, _>(2)?,
-            })
-        })
-        .unwrap()
-        .filter_map(|row| row.ok())
-        .collect::<Vec<_>>()
+        let (sql, values) = Query::select()
+            .from(SeenWallpapers::Table)
+            .columns([
+                SeenWallpapers::Id,
+                SeenWallpapers::ManagerId,
+                SeenWallpapers::Seen,
+            ])
+            .and_where(Expr::column(SeenWallpapers::Seen).eq(0))
+            .build_rusqlite(SqliteQueryBuilder);
+        let stmt = self.connection.prepare(sql.as_str()).inspect_err(|err| {
+            tracing::error!("error preparing query: {}", err);
+        });
+
+        if let Ok(mut stmt) = stmt {
+            return stmt
+                .query_map(&*values.as_params(), |row| Ok(DatabaseWallpaper::from(row)))
+                .inspect_err(log_query_error)
+                .unwrap() // TODO: dont unwrap
+                .filter_map(|row| match row {
+                    Ok(row) => Some(row),
+                    Err(error) => {
+                        tracing::debug!("got error from insert: {}", error);
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+        }
+
+        vec![]
     }
 
     pub fn reset_seen_state(&self) {
+        let (sql, _) = Query::update()
+            .table(SeenWallpapers::Table)
+            .value(SeenWallpapers::Seen, 0)
+            .build_rusqlite(SqliteQueryBuilder);
         self.connection
-            .execute("UPDATE seen_wallpapers SET seen = 0", [])
+            .execute(sql.as_str(), [])
             .expect("failed to reset seen status");
     }
 
     pub fn get_last_update(&self) -> Option<DateTime<Local>> {
-        make_last_update_sql(&self.connection)
-            .expect("failed to make query")
-            .query_row([], |row| row.get::<_, DateTime<Local>>(0))
+        let (sql, values) = Query::select()
+            .from(Meta::Table)
+            .column(Meta::LastUpdate)
+            .limit(1)
+            .build_rusqlite(SqliteQueryBuilder);
+
+        self.connection
+            .query_row(sql.as_str(), &*values.as_params(), |row| row.get(0))
             .ok()
     }
 
     pub fn update_last_run(&self) {
         let now = Local::now();
         tracing::info!("updating last run to {}", now);
-        make_last_run_sql(&self.connection, &now)
-            .expect("failed to create query")
-            .execute([now])
-            .expect("failed to update last run");
+
+        let (sql, values) = Query::insert()
+            .into_table(Meta::Table)
+            .columns([Meta::Id, Meta::LastUpdate])
+            .values_panic([1.into(), now.naive_local().into()])
+            .on_conflict(
+                OnConflict::column(Meta::Id)
+                    .update_column(Meta::LastUpdate)
+                    .to_owned(),
+            )
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let _ = self
+            .connection
+            .execute(sql.as_str(), &*values.as_params())
+            .inspect_err(log_query_error);
     }
 
     pub fn set_last_used(&self, wallpaper: &Wallpaper) {
         tracing::info!("updating last used wallpaper to {}", &wallpaper.id);
-        make_last_used_sql(&self.connection, &wallpaper.id)
-            .expect("failed to create query")
-            .execute([&wallpaper.id])
-            .expect("failed to update last run");
+
+        let (sql, values) = Query::insert()
+            .into_table(Meta::Table)
+            .columns([Meta::Id, Meta::LastUsed])
+            .values_panic([1.into(), (&wallpaper.id).into()])
+            .on_conflict(
+                OnConflict::column(Meta::Id)
+                    .update_column(Meta::LastUsed)
+                    .to_owned(),
+            )
+            .build_rusqlite(SqliteQueryBuilder);
+
+        let _ = self
+            .connection
+            .execute(sql.as_str(), &*values.as_params())
+            .inspect_err(log_query_error);
     }
 
-    pub fn get_meta(&self) -> Option<Meta> {
+    pub fn get_meta(&self) -> Option<MetaData> {
+        let (sql, values) = Query::select()
+            .from(Meta::Table)
+            .columns([Meta::LastUsed, Meta::LastUpdate])
+            .limit(1)
+            .and_where(Expr::col(Meta::Id).eq(1))
+            .build_rusqlite(SqliteQueryBuilder);
+
         self.connection
-            .query_row("SELECT last_update, last_used FROM meta", [], |row| {
-                Ok(Meta {
-                    last_update: row.get::<_, DateTime<Local>>(0)?,
-                    last_used: row.get::<_, String>(1)?,
+            .query_row(sql.as_str(), &*values.as_params(), |row| {
+                Ok(MetaData {
+                    last_update: row.get(Meta::LastUpdate.to_string().as_str())?,
+                    last_used: row.get(Meta::LastUsed.to_string().as_str())?,
                 })
             })
+            .inspect_err(log_query_error)
             .ok()
     }
+
     pub fn get_wallpaper(&self, id: &str) -> Option<DatabaseWallpaper> {
         let manager_id: u8 = get_config().file_config.content_manager_type.into();
-        self.connection
-            .query_row(
-                "SELECT id, seen, manager_id from seen_wallpapers WHERE id = ? AND manager_id = ?",
-                [id, manager_id.to_string().as_str()],
-                |row| {
-                    Ok(DatabaseWallpaper {
-                        id: row.get::<_, _>(0)?,
-                        seen: row.get::<_, _>(1)?,
-                        manager_id: row.get::<_, _>(2)?,
-                    })
-                },
+        let (sql, values) = Query::select()
+            .from(SeenWallpapers::Table)
+            .columns([
+                SeenWallpapers::Id,
+                SeenWallpapers::Seen,
+                SeenWallpapers::ManagerId,
+            ])
+            .and_where(Expr::col(SeenWallpapers::Id).eq(id).to_owned())
+            .and_where(
+                Expr::col(SeenWallpapers::ManagerId)
+                    .eq(manager_id)
+                    .to_owned(),
             )
+            .build_rusqlite(SqliteQueryBuilder);
+        self.connection
+            .query_row(sql.as_str(), &*values.as_params(), |row| {
+                Ok(DatabaseWallpaper::from(row))
+            })
             .ok()
     }
 }
 
-pub struct Meta {
+#[derive(Debug, Clone)]
+pub struct MetaData {
     #[allow(dead_code)]
-    pub last_update: DateTime<Local>,
+    pub last_update: Option<DateTime<Local>>,
     pub last_used: String,
 }
 
@@ -279,19 +364,23 @@ mod tests {
     use super::*;
 
     static SETUP: Once = Once::new();
-    pub fn setup() {
+    pub fn setup() -> Result<Store, Box<dyn Error>> {
         SETUP.call_once(|| {
             let config = Config::create_config();
             CONFIG.set(config).expect("failed to set ");
         });
+
+        Ok(Store::new()?)
     }
 
     #[test]
     fn test_mark_seen() -> Result<(), Box<dyn Error>> {
-        setup();
-        let store = Store::new()?;
+        let store = setup()?;
         let wallpaper1 = Wallpaper::new("test".to_string(), ContentManagerTypes::Local);
         let wallpaper2 = Wallpaper::new("test2".to_string(), ContentManagerTypes::Local);
+
+        store.insert_wallpaper(&wallpaper1)?;
+        store.insert_wallpaper(&wallpaper2)?;
 
         let not_seen1 = store.have_seen(&wallpaper1);
         let not_seen2 = store.have_seen(&wallpaper2);
@@ -310,12 +399,80 @@ mod tests {
 
     #[test]
     fn test_insert_wallpaper() -> Result<(), Box<dyn Error>> {
-        setup();
-        let store = Store::new()?;
+        let store = setup()?;
         let wallpaper = Wallpaper::new("test".to_string(), ContentManagerTypes::Local);
 
         store.insert_wallpaper(&wallpaper)?;
 
+        let all = store.get_inserted_wallpapers();
+        assert!(!all.is_empty());
+
         Ok(())
+    }
+
+    #[test]
+    fn test_wallpaper_inserts_read_all() -> Result<(), Box<dyn Error>> {
+        let store = setup()?;
+        let all = store.get_inserted_wallpapers();
+        assert!(all.is_empty());
+
+        for idx in 0..10 {
+            let wallpaper = Wallpaper::new(
+                format!("test{idx:?}").to_string(),
+                ContentManagerTypes::Local,
+            );
+            store.insert_wallpaper(&wallpaper)?;
+
+            let all2 = store.get_inserted_wallpapers();
+            assert_eq!(all2.len(), idx + 1);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_last_update() -> Result<(), Box<dyn Error>> {
+        let store = setup()?;
+        assert!(store.get_last_update().is_none());
+        store.update_last_run();
+        let last_update = store.get_last_update();
+
+        if let Some(first) = last_update {
+            store.update_last_run();
+            let last_update = store.get_last_update();
+
+            if let Some(second) = last_update {
+                assert_ne!(first, second);
+                return Ok(());
+            }
+        }
+
+        panic!("last_update not set");
+    }
+
+    #[test]
+    fn test_last_used() -> Result<(), Box<dyn Error>> {
+        let store = setup()?;
+        assert!(store.get_meta().is_none());
+
+        let wallpaper = Wallpaper::new("first".to_string(), ContentManagerTypes::Local);
+        store.insert_wallpaper(&wallpaper)?;
+        store.set_last_used(&wallpaper);
+
+        let meta = store.get_meta();
+
+        if let Some(first) = meta {
+            let wallpaper2 = Wallpaper::new("second".to_string(), ContentManagerTypes::Local);
+            store.insert_wallpaper(&wallpaper2)?;
+            store.set_last_used(&wallpaper2);
+            let meta2 = store.get_meta();
+
+            if let Some(second) = meta2 {
+                assert_ne!(first.last_used, second.last_used);
+                return Ok(());
+            }
+        }
+
+        panic!("meta not set");
     }
 }
