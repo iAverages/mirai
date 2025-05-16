@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use chrono::{DateTime, Local};
-use rusqlite::{Connection, Error, Result, Row, Statement, prepare_and_bind};
+use rusqlite::{Connection, Error, Result, Row};
 use sea_query::{Expr, Iden, OnConflict, Query, SqliteQueryBuilder};
 use sea_query_rusqlite::RusqliteBinder;
 use thiserror::Error;
@@ -17,6 +17,8 @@ pub enum StoreError {
     #[error("failed to update row in store")]
     UpdateFailed,
 }
+
+refinery::embed_migrations!("migrations");
 
 pub struct Store {
     connection: Connection,
@@ -87,14 +89,14 @@ fn log_query_error(err: &Error) {
 
 impl Store {
     pub fn new() -> Result<Store> {
-        let conn = if cfg!(test) {
+        let mut conn = if cfg!(test) {
             Connection::open_in_memory()?
         } else {
             let data_dir_path: PathBuf = get_config().data_dir.clone().into();
             Connection::open(data_dir_path.join("data.sqlite"))?
         };
-        let _ = conn.execute(SETUP_SEEN_TABLE_SQL, ())?;
-        let _ = conn.execute(SETUP_META_TABLE_SQL, ())?;
+
+        migrations::runner().run(&mut conn).unwrap();
         let store = Store { connection: conn };
         Ok(store)
     }
