@@ -3,8 +3,6 @@ name: "test"
 on:
   pull_request:
   push:
-    tags-ignore:
-      - 'v*'
 
 jobs:
   build:
