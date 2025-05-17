@@ -1,7 +1,6 @@
-name: "test" 
+name: "test"
 
 on:
-  workflow_call:
   pull_request:
   push:
     tags-ignore:
@@ -9,15 +8,4 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-    - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v31
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-    - run: nix develop
-    - run: cargo test
+    uses: ./.github/workflows/test-bin.yaml

@@ -10,10 +10,10 @@ permissions:
 
 jobs:
   build:
-    uses: ./.github/workflows/build.yaml
+    uses: ./.github/workflows/build-bin.yaml
 
   test:
-    uses: ./.github/workflows/test.yaml
+    uses: ./.github/workflows/test-bin.yaml
 
   release:
     needs: [build, test]
