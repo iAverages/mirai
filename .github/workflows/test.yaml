@@ -1,7 +1,11 @@
-name: "build bin"
+name: "test" 
 
 on:
   workflow_call:
+  pull_request:
+  push:
+    tags-ignore:
+      - 'v*'
 
 jobs:
   build:
@@ -15,8 +19,5 @@ jobs:
     - uses: cachix/install-nix-action@v31
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
-    - run: nix build
-    - uses: actions/upload-artifact@v4
-      with:
-        name: ${{ runner.os }}-artifacts
-        path: result/bin
+    - run: nix develop
+    - run: cargo test
