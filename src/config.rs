@@ -1,13 +1,16 @@
-use std::fmt::Display;
-use std::fs;
-use std::path::Path;
-
+#[cfg(not(test))]
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+#[cfg(not(test))]
+use std::fs;
+#[cfg(not(test))]
+use std::path::Path;
 use tracing::Level;
 
 use crate::content_managers::ContentManagerTypes;
 
+#[cfg(not(test))]
 const CONFIG_NAME: &str = "mirai.toml";
 
 #[derive(Debug)]
@@ -146,6 +149,7 @@ impl Config {
     }
 }
 
+#[cfg(not(test))]
 impl Config {
     fn load_config(config_dir: &Path, data_dir: &Path) -> Config {
         let config_path = config_dir.join(CONFIG_NAME);
