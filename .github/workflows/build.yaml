@@ -3,6 +3,10 @@ name: "Build"
 on:
   pull_request:
   push:
+    branches:
+      - '**'
+    tags-ignore:
+      - 'v*'
 
 jobs:
   build:
