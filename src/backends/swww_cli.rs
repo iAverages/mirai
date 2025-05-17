@@ -22,6 +22,7 @@ impl WallpaperBackend for SwwCliBackend {
         let wallpaper_path = wallpaper_path.to_str().unwrap();
         tracing::debug!("[swww-cli] setting wallpaper {}", wallpaper_path);
         let output = Command::new("swww")
+            // TODO: setup config option for resize
             .args(["img", "--resize=fit", wallpaper_path])
             .output()
             .map_err(|_| WallpaperBackendError::ChangeFailure)?;

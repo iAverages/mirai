@@ -4,7 +4,11 @@ mod content_managers;
 mod store;
 mod wallpaper;
 
+use self::backends::WallpaperBackend;
+#[cfg(not(target_os = "windows"))]
 use self::backends::swww_cli::SwwCliBackend;
+#[cfg(target_os = "windows")]
+use self::backends::windows::Windows;
 use self::config::{Config, LogLevel};
 use self::content_managers::ContentManagerTypes;
 use self::content_managers::git::GitContentManager;
@@ -66,7 +70,13 @@ fn get_content_manager() -> ContentManager {
     }
 }
 
-fn get_backend() -> SwwCliBackend {
+#[cfg(target_os = "windows")]
+fn get_backend() -> impl WallpaperBackend {
+    Windows::new()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_backend() -> impl WallpaperBackend {
     SwwCliBackend::new()
 }
 

@@ -1,7 +1,9 @@
 {
+  rust,
   rustPlatform,
   lib,
   pkgs,
+  buildWindows ? false,
 }: let
   cargoToml = builtins.fromTOML (builtins.readFile ../Cargo.toml);
 in
@@ -10,27 +12,36 @@ in
     inherit (cargoToml.package) version;
 
     cargoLock.lockFile = ../Cargo.lock;
-    cargoLock.outputHashes = {
-      "common-0.9.5-masterV3" = "sha256-h+hBelFhaf3NIwjxBjUWco+hhvO5xwzdcWaPtBWWweI=";
-    };
 
     src = lib.cleanSourceWith {
       src = ../.;
     };
-
-    nativeBuildInputs = with pkgs; [pkg-config];
+    nativeBuildInputs = with pkgs;
+      [
+        pkg-config
+        rust
+      ]
+      ++ lib.optionals buildWindows [
+        pkgsCross.mingwW64.stdenv.cc
+      ];
 
     buildInputs = with pkgs; [
       lz4
     ];
 
+    env = lib.optionalAttrs buildWindows {
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.pkgsCross.mingwW64.stdenv.cc}/bin/x86_64-w64-mingw32-gcc";
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS = "-L native=${pkgs.pkgsCross.mingwW64.windows.pthreads}/lib";
+    };
+
     doCheck = false;
 
     buildPhase = ''
-      cargo build --release
+      cargo build --release ${lib.optionalString buildWindows "--target=x86_64-pc-windows-gnu"}
     '';
 
     installPhase = ''
+      mkdir -p $out/bin
       install -Dm755 target/release/mirai $out/bin/mirai
     '';
 
@@ -38,7 +49,7 @@ in
       description = "Swww wallpaper manager";
       homepage = "https://github.com/iaverages/mirai";
       license = licenses.mit;
-      platforms = platforms.linux;
+      platforms = platforms.linux ++ platforms.windows;
       mainProgram = "mirai";
     };
   }

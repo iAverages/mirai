@@ -1,4 +1,7 @@
+#[cfg(not(target_os = "windows"))]
 pub mod swww_cli;
+#[cfg(target_os = "windows")]
+pub mod windows;
 
 use thiserror::Error;
 
