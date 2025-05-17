@@ -51,18 +51,6 @@ impl TryInto<Wallpaper> for DatabaseWallpaper {
     }
 }
 
-static SETUP_SEEN_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS seen_wallpapers (
-           id TEXT PRIMARY KEY,
-           seen BOOLEAN,
-           manager_id INTEGER 
-        )";
-
-static SETUP_META_TABLE_SQL: &str = "CREATE TABLE IF NOT EXISTS meta (
-           id INTEGER PRIMARY KEY,
-           last_update datetime,
-           last_used TEXT
-        )";
-
 #[derive(Iden)]
 enum SeenWallpapers {
     Table,
