@@ -23,7 +23,9 @@ impl Windows {
 
 impl WallpaperBackend for Windows {
     fn set_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), WallpaperBackendError> {
-        let wallpaper_path = &wallpaper.get_wallpaper_path();
+        let wallpaper_path = &wallpaper
+            .get_wallpaper_path()
+            .map_err(|_| WallpaperBackendError::ChangeFailure)?;
         let wallpaper_path = wallpaper_path.to_str().unwrap();
         tracing::debug!("[windows] setting wallpaper {}", wallpaper_path);
 
