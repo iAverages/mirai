@@ -7,8 +7,6 @@ mod wallpaper;
 use self::backends::WallpaperBackend;
 #[cfg(not(target_os = "windows"))]
 use self::backends::swww_cli::SwwCliBackend;
-#[cfg(target_os = "windows")]
-use self::backends::windows::Windows;
 use self::config::{Config, LogLevel};
 use self::content_managers::ContentManagerTypes;
 use self::content_managers::git::GitContentManager;
@@ -28,7 +26,51 @@ pub fn get_config() -> &'static Config {
     CONFIG.get().expect("config is not yet initizlised")
 }
 
+// main function for windows which has the cli for
+// managing the service that is used on windows
+#[cfg(target_os = "windows")]
 fn main() -> Result<(), String> {
+    use auto_launch::AutoLaunchBuilder;
+    use clap::Parser;
+    use std::env;
+
+    #[derive(Parser, Debug)]
+    #[command(version, about, long_about = None)]
+    struct Args {
+        /// Autostart mirai on boot
+        #[arg(long, action)]
+        autostart: Option<bool>,
+    }
+
+    let args = Args::parse();
+
+    let auto = AutoLaunchBuilder::new()
+        .set_app_name("mirai")
+        .set_app_path(env::current_exe().unwrap().to_str().unwrap())
+        .build()
+        .unwrap();
+
+    if let Some(autostart) = args.autostart {
+        if autostart {
+            auto.enable().map_err(|err| err.to_string())?;
+            return Ok(());
+        } else {
+            auto.disable().map_err(|err| err.to_string())?;
+            return Ok(());
+        }
+    }
+
+    shared_main()
+}
+
+// main function for linux, does not have CLI as cli is used
+// only to manage the windows service that is registered
+#[cfg(not(target_os = "windows"))]
+fn main() -> Result<(), String> {
+    shared_main()
+}
+
+fn shared_main() -> Result<(), String> {
     let config = Config::create_config();
     let _ = CONFIG.set(config);
 
@@ -77,6 +119,7 @@ fn get_content_manager() -> ContentManager {
 
 #[cfg(target_os = "windows")]
 fn get_backend() -> impl WallpaperBackend {
+    use backends::windows::Windows;
     Windows::new()
 }
 

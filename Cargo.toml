@@ -27,6 +27,8 @@ toml = "0.8.22"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 refinery = { version = "0.8.16", features = ["rusqlite-bundled"] }
+clap = { version = "4.5.38", features = ["derive"] }
+auto-launch = "0.5.0"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["winuser"] }
