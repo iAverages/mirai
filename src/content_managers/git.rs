@@ -10,6 +10,9 @@ use crate::content_managers::ContentManagerTypes;
 use crate::get_config;
 use crate::wallpaper::{Wallpaper, WallpaperContentManager, WallpaperContentManagerError};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 #[derive(Debug)]
 pub struct GitContentManager;
 
@@ -166,20 +169,27 @@ impl GitTempRepo {
     }
 
     fn run(&self, command: &str) -> Result<Output, ()> {
-        let parts = command.split(" ").collect::<Vec<_>>();
+        let parts = command.split_whitespace().collect::<Vec<_>>();
         let cmd = parts[0];
         let args = &parts[1..parts.len()];
-        let output = Command::new(cmd)
-            .args(args)
-            .current_dir(&self.path)
-            .output()
-            .map_err(|_| ())?;
+
+        let mut cmd = Command::new(cmd);
+        cmd.args(args).current_dir(&self.path);
+
+        #[cfg(windows)]
+        {
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        let output = cmd.output().map_err(|_| ())?;
 
         let span = tracing::debug_span!("running command", command = command);
         tracing::trace!("status: {}", output.status);
         tracing::trace!("stdout: {}", String::from_utf8_lossy(&output.stdout));
         tracing::trace!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         drop(span);
+
         Ok(output)
     }
 }

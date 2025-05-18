@@ -1,12 +1,15 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod backends;
 mod config;
 mod content_managers;
 mod store;
 mod wallpaper;
 
-use self::backends::WallpaperBackend;
 #[cfg(not(target_os = "windows"))]
 use self::backends::swww_cli::SwwCliBackend;
+
+use self::backends::WallpaperBackend;
 use self::config::{Config, LogLevel};
 use self::content_managers::ContentManagerTypes;
 use self::content_managers::git::GitContentManager;
@@ -81,6 +84,7 @@ fn shared_main() -> Result<(), String> {
         .init();
 
     tracing::info!("starting mirai");
+    tracing::info!("using config at {}", get_config().data_dir);
 
     let data_dir_path: PathBuf = get_config().data_dir.clone().into();
     let data_dir_str = data_dir_path.to_str().unwrap_or("N/A");
