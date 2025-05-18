@@ -97,6 +97,7 @@ impl GitTempRepo {
             .take(10)
             .map(char::from)
             .collect();
+        tracing::info!("creating new temp repo: {}", temp_id);
         temp_repo_loc.push(temp_id);
         fs::create_dir_all(&temp_repo_loc)
             .map_err(|err| GitTempRepoError::IoError(err.to_string()))?;
@@ -175,9 +176,9 @@ impl GitTempRepo {
             .map_err(|_| ())?;
 
         let span = tracing::debug_span!("running command", command = command);
-        tracing::debug!("status: {}", output.status);
-        tracing::debug!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-        tracing::debug!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+        tracing::trace!("status: {}", output.status);
+        tracing::trace!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+        tracing::trace!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         drop(span);
         Ok(output)
     }

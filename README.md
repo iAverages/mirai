@@ -125,6 +125,12 @@ On Windows, use:
 
 Mirai will start rotating wallpapers based on your settings.
 
+On Windows, you can setup auto start on boot using:
+
+```powershell
+.\mirai.exe --autostart true
+```
+
 ## License
 
 Licensed under the [MIT License](LICENSE).
