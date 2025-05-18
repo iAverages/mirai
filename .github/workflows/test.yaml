@@ -1,4 +1,4 @@
-name: "Build"
+name: "test"
 
 on:
   pull_request:
@@ -10,4 +10,4 @@ on:
 
 jobs:
   build:
-    uses: ./.github/workflows/build-bin.yaml
+    uses: ./.github/workflows/test-bin.yaml
