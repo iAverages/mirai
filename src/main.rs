@@ -53,7 +53,12 @@ fn main() -> Result<(), String> {
         .store_wallpapers(&content_manager)
         .map_err(|err| err.to_string())?;
 
-    wallpaper_manager.set_last_wallpaper();
+    // if wallpaper needs changing, dont set current wallpaper, handle next change in loop
+    let last_update = store.get_last_update();
+    if !should_update_wallpaper(get_config().file_config.local.update_interval, last_update) {
+        wallpaper_manager.set_last_wallpaper();
+    }
+
     loop {
         let last_update = store.get_last_update();
         if should_update_wallpaper(get_config().file_config.local.update_interval, last_update) {
