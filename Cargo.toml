@@ -32,4 +32,4 @@ auto-launch = "0.5.0"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["winuser"] }
-winreg = "0.9"
+winreg = "0.55"
