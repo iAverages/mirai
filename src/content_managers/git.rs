@@ -69,7 +69,7 @@ impl GitContentManager {
         path.push(&wallpaper_path);
         path.push(id);
 
-        let meta = fs::metadata(path)?;
+        let meta = fs::metadata(&path).map_err(|_| ())?;
         if meta.len() == 0 {
             tracing::error!("file has no bytes");
             return Err(());
