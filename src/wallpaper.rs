@@ -94,9 +94,15 @@ impl<'a> WallpapersManager<'a> {
             .clone()
             .try_into()
             .expect("database has unsupported manager id. this is a bug");
-        // TODO: handle errors
-        self.backend.set_wallpaper(&next_wallpaper).unwrap();
-        self.store.mark_as_seen(&next_wallpaper).unwrap();
+        let _ = self
+            .backend
+            .set_wallpaper(&next_wallpaper)
+            .inspect_err(|err| {
+                tracing::error!("failed to set wallpaper: {}", err);
+            });
+        let _ = self.store.mark_as_seen(&next_wallpaper).inspect_err(|err| {
+            tracing::error!("failed to mark wallpaper as seen: {}", err);
+        });
         self.store.set_last_used(&next_wallpaper);
         self.store.update_last_run();
     }
