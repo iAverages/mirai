@@ -24,6 +24,8 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::Level;
 
+static MAX_BACKEND_READY_ATTEMPTS: i32 = 100;
+
 static CONFIG: OnceCell<Config> = OnceCell::new();
 pub fn get_config() -> &'static Config {
     CONFIG.get().expect("config is not yet initizlised")
@@ -94,6 +96,18 @@ fn shared_main() -> Result<(), String> {
     let backend = get_backend();
     let store = Store::new().map_err(|err| err.to_string())?;
     let content_manager = get_content_manager();
+
+    // wait for backend to be ready before continuning
+    let mut attempts = 0;
+    while !backend.is_ready() {
+        if attempts > MAX_BACKEND_READY_ATTEMPTS {
+            return Err("backend was never ready".to_string());
+        }
+        tracing::info!("waiting for backend to be ready");
+        sleep(Duration::from_secs(1));
+        attempts += 1;
+    }
+
     let wallpaper_manager = WallpapersManager::new(&store, backend);
     wallpaper_manager
         .store_wallpapers(&content_manager)

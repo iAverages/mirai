@@ -35,4 +35,12 @@ impl WallpaperBackend for SwwCliBackend {
             Err(WallpaperBackendError::ChangeFailure)
         }
     }
+
+    fn is_ready(&self) -> bool {
+        let result = Command::new("swww").args(["query"]).output();
+        match result {
+            Ok(cmd) => cmd.status.success(),
+            Err(_) => false,
+        }
+    }
 }

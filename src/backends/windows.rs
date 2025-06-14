@@ -59,4 +59,8 @@ impl WallpaperBackend for Windows {
             Ok(())
         }
     }
+
+    fn is_ready(&self) -> bool {
+        true
+    }
 }
