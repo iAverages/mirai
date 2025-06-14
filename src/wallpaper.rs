@@ -1,4 +1,5 @@
 use rand::Rng;
+use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
@@ -153,6 +154,11 @@ impl Wallpaper {
             ContentManagerTypes::Local => {
                 let config = get_config();
                 let wallpaper_path = PathBuf::from(config.file_config.local.location.clone());
+                let meta = fs::metadata(wallpaper_path)?;
+                if meta.len() == 0 {
+                    tracing::error!("file has no bytes");
+                    return Err(());
+                }
                 Ok(wallpaper_path.join(self.id.clone()))
             }
             ContentManagerTypes::Git => GitContentManager::get_temp_file(&self.id),

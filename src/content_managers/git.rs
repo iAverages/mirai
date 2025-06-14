@@ -68,6 +68,12 @@ impl GitContentManager {
         let mut path = temp_repo.path.clone();
         path.push(&wallpaper_path);
         path.push(id);
+
+        let meta = fs::metadata(path)?;
+        if meta.len() == 0 {
+            tracing::error!("file has no bytes");
+            return Err(());
+        }
         Ok(path)
     }
 }
