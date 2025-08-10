@@ -15,7 +15,7 @@ chrono = { version = "0.4" }
 directories = "6.0.0"
 once_cell = "1.21.3"
 rand = "0.9.1"
-rusqlite = { version = "0.32.0", features = [
+rusqlite = { version = "0.37.0", features = [
     "bundled",
     "rusqlite-macros",
     "chrono",
