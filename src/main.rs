@@ -115,13 +115,13 @@ fn shared_main() -> Result<(), String> {
 
     // if wallpaper needs changing, dont set current wallpaper, handle next change in loop
     let last_update = store.get_last_update();
-    if !should_update_wallpaper(get_config().file_config.local.update_interval, last_update) {
+    if !should_update_wallpaper(get_config().file_config.update_interval, last_update) {
         wallpaper_manager.set_last_wallpaper();
     }
 
     loop {
         let last_update = store.get_last_update();
-        if should_update_wallpaper(get_config().file_config.local.update_interval, last_update) {
+        if should_update_wallpaper(get_config().file_config.update_interval, last_update) {
             wallpaper_manager.set_next_wallpaper();
         }
         sleep(Duration::from_secs(get_seconds_till_minute()));

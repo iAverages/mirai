@@ -28,6 +28,7 @@ impl Display for Config {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct FileConfig {
+    pub update_interval: u32,
     pub log_level: Option<LogLevel>,
     pub content_manager_type: ContentManagerTypes,
     pub local: LocalWallpaperConfig,
@@ -37,6 +38,7 @@ pub struct FileConfig {
 impl Default for FileConfig {
     fn default() -> Self {
         FileConfig {
+            update_interval: 1440,
             content_manager_type: ContentManagerTypes::Local,
             local: LocalWallpaperConfig::default(),
             log_level: None,
@@ -102,14 +104,12 @@ impl Display for FileConfig {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct LocalWallpaperConfig {
-    pub location: String,
-    pub update_interval: u32,
+    pub path: String,
 }
 impl Default for LocalWallpaperConfig {
     fn default() -> Self {
         LocalWallpaperConfig {
-            location: "".to_string(),
-            update_interval: 1440,
+            path: "".to_string(),
         }
     }
 }
