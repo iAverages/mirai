@@ -13,9 +13,17 @@ in
 
     cargoLock.lockFile = ../Cargo.lock;
 
-    src = lib.cleanSourceWith {
+    src = let
       src = ../.;
-    };
+      foldersToIgnore = ["nix" ".jj" ".github" ".git"];
+    in
+      lib.cleanSourceWith {
+        inherit src;
+        filter = path: type: let
+          relativePath = lib.removePrefix "${toString src}/" path;
+        in
+          ! (lib.any (ignoredDir: relativePath == ignoredDir || lib.hasPrefix "${ignoredDir}/" relativePath) foldersToIgnore);
+      };
     nativeBuildInputs = with pkgs;
       [
         pkg-config

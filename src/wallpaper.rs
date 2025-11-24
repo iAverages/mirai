@@ -159,7 +159,7 @@ impl Wallpaper {
         match self.type_id {
             ContentManagerTypes::Local => {
                 let config = get_config();
-                let wallpaper_path = PathBuf::from(config.file_config.local.location.clone());
+                let wallpaper_path = PathBuf::from(config.file_config.local.path.clone());
                 let meta = fs::metadata(&wallpaper_path).map_err(|_| ())?;
                 if meta.len() == 0 {
                     tracing::error!("file has no bytes");
