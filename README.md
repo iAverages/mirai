@@ -89,7 +89,7 @@ update_interval = 1440 # 24 hours in minutes
 [local]
 # path on disk to your wallpapers folder
 # can have nested folders
-location = "/home/dan/dotfiles/wallpapers/"
+path = "/home/dan/dotfiles/wallpapers/"
 ```
 
 Git example:
