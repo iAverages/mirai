@@ -55,6 +55,25 @@ impl WallpaperContentManager for GitContentManager {
             })
             .collect::<Vec<_>>())
     }
+
+    fn cleanup_wallpaper(&self, wallpaper: Wallpaper) -> bool {
+        match wallpaper.get_wallpaper_path() {
+            Ok(path) => {
+                let parent = path.parent();
+                if let Some(parent) = parent {
+                    match fs::remove_dir_all(parent) {
+                        Ok(_) => return true,
+                        Err(error) => {
+                            tracing::error!("failed to cleanup wallpapers cache: {:?}", error);
+                            return false;
+                        }
+                    }
+                }
+                false
+            }
+            Err(_) => false,
+        }
+    }
 }
 
 impl GitContentManager {
@@ -155,10 +174,10 @@ impl GitTempRepo {
             .stdout
             .lines()
             .filter_map(|file| {
-                if let Ok(file) = file {
-                    if file.starts_with(path) {
-                        return Some(file.replace(path, "").trim_start_matches("/").to_string());
-                    }
+                if let Ok(file) = file
+                    && file.starts_with(path)
+                {
+                    return Some(file.replace(path, "").trim_start_matches("/").to_string());
                 }
 
                 None

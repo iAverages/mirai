@@ -31,4 +31,9 @@ impl WallpaperContentManager for LocalContentManager {
             })
             .collect::<Vec<_>>())
     }
+
+    // do not cleanup local wallpapers
+    fn cleanup_wallpaper(&self, _: Wallpaper) -> bool {
+        false
+    }
 }

@@ -31,6 +31,13 @@ impl WallpaperContentManager for ContentManager {
             ContentManager::Local(manager) => manager.get_wallpapers(),
         }
     }
+
+    fn cleanup_wallpaper(&self, wallpaper: Wallpaper) -> bool {
+        match self {
+            ContentManager::Git(manager) => manager.cleanup_wallpaper(wallpaper),
+            ContentManager::Local(manager) => manager.cleanup_wallpaper(wallpaper),
+        }
+    }
 }
 
 pub struct WallpapersManager<'a> {
@@ -40,6 +47,8 @@ pub struct WallpapersManager<'a> {
 
 pub trait WallpaperContentManager {
     fn get_wallpapers(&self) -> Result<Vec<Wallpaper>, WallpaperContentManagerError>;
+    // optional function to cleanup wallpapers when no longer needed
+    fn cleanup_wallpaper(&self, wallpaper: Wallpaper) -> bool;
 }
 
 impl<'a> WallpapersManager<'a> {
@@ -70,7 +79,7 @@ impl<'a> WallpapersManager<'a> {
         Ok(())
     }
 
-    pub fn set_next_wallpaper(&self) {
+    pub fn set_next_wallpaper(&mut self, content_manager: &impl WallpaperContentManager) {
         tracing::debug!("setting next wallpaper");
         let mut unseen_wallpapers = self.store.get_unseen_wallpaperrs();
         tracing::debug!("{} unseen wallpapers", unseen_wallpapers.len());
@@ -103,21 +112,22 @@ impl<'a> WallpapersManager<'a> {
         let _ = self.store.mark_as_seen(&next_wallpaper).inspect_err(|err| {
             tracing::error!("failed to mark wallpaper as seen: {}", err);
         });
+        let current_wallpaper = self.get_current_wallpaper();
         self.store.set_last_used(&next_wallpaper);
         self.store.update_last_run();
+        if let Some(wallpaper) = current_wallpaper {
+            tracing::info!("cleaning up last used wallpaper");
+            content_manager.cleanup_wallpaper(wallpaper);
+        }
     }
 
     pub fn set_last_wallpaper(&self) {
-        let Some(meta) = self.store.get_meta() else {
+        let wallpaper = self.get_current_wallpaper();
+        if wallpaper.is_none() {
             return;
-        };
-        let Some(db_wallpaper) = self.store.get_wallpaper(&meta.last_used) else {
-            return;
-        };
+        }
+        let wallpaper = wallpaper.unwrap();
 
-        let wallpaper = db_wallpaper
-            .try_into()
-            .expect("failed to get wallpaper from db wallpaper");
         let mut times = 0;
         loop {
             if self.backend.set_wallpaper(&wallpaper).is_ok() {
@@ -135,6 +145,17 @@ impl<'a> WallpapersManager<'a> {
             sleep(Duration::from_secs(5));
         }
     }
+
+    pub fn get_current_wallpaper(&self) -> Option<Wallpaper> {
+        let meta = self.store.get_meta()?;
+        let db_wallpaper = self.store.get_wallpaper(&meta.last_used)?;
+
+        let wallpaper: Wallpaper = db_wallpaper
+            .try_into()
+            .expect("failed to get wallpaper from db wallpaper");
+
+        Some(wallpaper)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -145,6 +166,7 @@ pub enum WallpapersMangerError {
     GetWallpaperError,
 }
 
+#[derive(Clone)]
 pub struct Wallpaper {
     pub id: String,
     pub type_id: ContentManagerTypes,

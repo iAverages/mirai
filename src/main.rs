@@ -108,7 +108,7 @@ fn shared_main() -> Result<(), String> {
         attempts += 1;
     }
 
-    let wallpaper_manager = WallpapersManager::new(&store, backend);
+    let mut wallpaper_manager = WallpapersManager::new(&store, backend);
     wallpaper_manager
         .store_wallpapers(&content_manager)
         .map_err(|err| err.to_string())?;
@@ -122,7 +122,7 @@ fn shared_main() -> Result<(), String> {
     loop {
         let last_update = store.get_last_update();
         if should_update_wallpaper(get_config().file_config.update_interval, last_update) {
-            wallpaper_manager.set_next_wallpaper();
+            wallpaper_manager.set_next_wallpaper(&content_manager);
         }
         sleep(Duration::from_secs(get_seconds_till_minute()));
     }
