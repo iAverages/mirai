@@ -230,12 +230,12 @@ impl Store {
     }
 
     pub fn reset_seen_state(&self) {
-        let (sql, _) = Query::update()
+        let (sql, values) = Query::update()
             .table(SeenWallpapers::Table)
             .value(SeenWallpapers::Seen, 0)
             .build_rusqlite(SqliteQueryBuilder);
         self.connection
-            .execute(sql.as_str(), [])
+            .execute(sql.as_str(), &*values.as_params())
             .expect("failed to reset seen status");
     }
 
