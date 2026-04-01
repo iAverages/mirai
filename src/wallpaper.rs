@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::RngExt;
 use std::fs;
 use std::path::PathBuf;
 use std::thread::sleep;
