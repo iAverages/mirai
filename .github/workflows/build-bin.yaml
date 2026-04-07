@@ -8,15 +8,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+        - runner: ubuntu-latest
+          package: default
+          artifact_name: linux-x86_64
+          artifact_path: result/bin/mirai
+        - runner: ubuntu-latest
+          package: windows
+          artifact_name: windows-x86_64
+          artifact_path: result/bin/mirai.exe
+    runs-on: ${{ matrix.runner }}
     steps:
     - uses: actions/checkout@v6
     - uses: cachix/install-nix-action@v31
       with:
         github_access_token: ${{ secrets.GITHUB_TOKEN }}
-    - run: nix build
+    - run: nix build .#${{ matrix.package }}
     - uses: actions/upload-artifact@v6
       with:
-        name: ${{ runner.os }}-artifacts
-        path: result/bin
+        name: ${{ matrix.artifact_name }}
+        path: ${{ matrix.artifact_path }}
