@@ -3,6 +3,7 @@
 mod backends;
 mod config;
 mod content_managers;
+mod log;
 mod store;
 mod wallpaper;
 
