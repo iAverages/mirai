@@ -52,7 +52,7 @@ impl WallpaperBackend for SwwCliBackend {
     }
 
     fn is_ready(&self) -> bool {
-        let result = Command::new("swww").args(["query"]).output();
+        let result = Command::new(self.bin_name).args(["query"]).output();
         match result {
             Ok(cmd) => cmd.status.success(),
             Err(_) => false,
