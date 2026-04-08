@@ -20,7 +20,9 @@ use self::wallpaper::{ContentManager, WallpapersManager};
 use chrono::{DateTime, Datelike, Local, TimeZone};
 use once_cell::sync::OnceCell;
 use std::fs;
-use std::path::PathBuf;
+#[cfg(target_os = "windows")]
+use std::fs::OpenOptions;
+use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::Level;
@@ -82,17 +84,17 @@ fn shared_main() -> Result<(), String> {
 
     let log_level = get_config().file_config.log_level;
     let log_level = log_level.unwrap_or(LogLevel(Level::INFO));
-    tracing_subscriber::fmt()
-        .with_max_level(log_level.inner())
-        .init();
+
+    let data_dir_path: PathBuf = get_config().data_dir.clone().into();
+    fs::create_dir_all(&data_dir_path).map_err(|err| err.to_string())?;
+
+    init_logging(log_level.inner(), &data_dir_path)?;
 
     tracing::info!("starting mirai");
     tracing::info!("using config at {}", get_config().data_dir);
 
-    let data_dir_path: PathBuf = get_config().data_dir.clone().into();
     let data_dir_str = data_dir_path.to_str().unwrap_or("N/A");
-    tracing::debug!("creating data directory {}", data_dir_str);
-    fs::create_dir_all(data_dir_path).map_err(|err| err.to_string())?;
+    tracing::debug!("using data directory at {}", data_dir_str);
 
     let backend = get_backend();
     let store = Store::new().map_err(|err| err.to_string())?;
@@ -127,6 +129,40 @@ fn shared_main() -> Result<(), String> {
         }
         sleep(Duration::from_secs(get_seconds_till_minute()));
     }
+}
+
+#[cfg(target_os = "windows")]
+fn init_logging(log_level: Level, data_dir: &Path) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    {
+        tracing_subscriber::fmt().with_max_level(log_level).init();
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let log_path = data_dir.join("mirai.log");
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .map_err(|err| format!("failed to open log file {}: {}", log_path.display(), err))?;
+
+        let writer = move || file.try_clone().expect("failed to clone log file handle");
+
+        tracing_subscriber::fmt()
+            .with_max_level(log_level)
+            .with_ansi(false)
+            .with_writer(writer)
+            .init();
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn init_logging(log_level: Level, _data_dir: &Path) -> Result<(), String> {
+    tracing_subscriber::fmt().with_max_level(log_level).init();
+    Ok(())
 }
 
 fn get_content_manager() -> ContentManager {
