@@ -6,6 +6,7 @@ self: {
 }: let
   inherit (lib) types;
   cfg = config.services.mirai;
+  mirai = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
   tomlFormat = pkgs.formats.toml {};
 in {
   options.services.mirai = {
@@ -67,7 +68,7 @@ in {
     ];
 
     home = {
-      packages = [self.packages.${pkgs.system}.default];
+      packages = [mirai];
 
       file.".config/mirai/mirai.toml".source = tomlFormat.generate "mirai.toml" {
         log_level = cfg.settings.log_level;
@@ -91,7 +92,7 @@ in {
         After = ["graphical-session.target"];
       };
       Service = {
-        ExecStart = "${self.packages.${pkgs.system}.default}/bin/mirai";
+        ExecStart = "${mirai}/bin/mirai";
         Restart = "always";
       };
       Install = {
