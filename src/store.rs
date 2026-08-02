@@ -258,7 +258,7 @@ impl Store {
         let (sql, values) = Query::insert()
             .into_table(Meta::Table)
             .columns([Meta::Id, Meta::LastUpdate])
-            .values_panic([1.into(), now.naive_local().into()])
+            .values_panic([1.into(), now.into()])
             .on_conflict(
                 OnConflict::column(Meta::Id)
                     .update_column(Meta::LastUpdate)
@@ -438,6 +438,22 @@ mod tests {
         }
 
         panic!("last_update not set");
+    }
+
+    #[test]
+    fn test_last_update_stores_timezone_offset() -> Result<(), Box<dyn Error>> {
+        let store = setup()?;
+        store.update_last_run();
+
+        let stored: String =
+            store
+                .connection
+                .query_row("SELECT last_update FROM meta WHERE id = 1", [], |row| {
+                    row.get(0)
+                })?;
+
+        assert!(DateTime::parse_from_rfc3339(&stored).is_ok());
+        Ok(())
     }
 
     #[test]

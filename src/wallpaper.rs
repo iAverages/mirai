@@ -80,7 +80,7 @@ impl<'a> WallpapersManager<'a> {
     }
 
     pub fn set_next_wallpaper(&mut self, content_manager: &impl WallpaperContentManager) {
-        tracing::debug!("setting next wallpaper");
+        tracing::info!("setting next wallpaper");
         let mut unseen_wallpapers = self.store.get_unseen_wallpaperrs();
         tracing::debug!("{} unseen wallpapers", unseen_wallpapers.len());
 
@@ -131,6 +131,7 @@ impl<'a> WallpapersManager<'a> {
         let mut times = 0;
         loop {
             if self.backend.set_wallpaper(&wallpaper).is_ok() {
+                tracing::info!("set last wallpaper");
                 return;
             };
 
