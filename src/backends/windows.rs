@@ -11,6 +11,7 @@ use winreg::RegKey;
 use winreg::enums::*;
 
 use super::{WallpaperBackend, WallpaperBackendError};
+use crate::wallpaper::get_active_wallpaper_path;
 
 pub struct Windows;
 
@@ -22,10 +23,13 @@ impl Windows {
 }
 
 impl WallpaperBackend for Windows {
-    fn set_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), WallpaperBackendError> {
-        let wallpaper_path = &wallpaper
-            .get_wallpaper_path()
-            .map_err(|_| WallpaperBackendError::ChangeFailure)?;
+    fn set_wallpaper(&self, wallpaper: Option<&Wallpaper>) -> Result<(), WallpaperBackendError> {
+        let wallpaper_path = match wallpaper {
+            Some(w) => w
+                .get_wallpaper_path()
+                .map_err(|_| WallpaperBackendError::ChangeFailure)?,
+            None => get_active_wallpaper_path(),
+        };
         let wallpaper_path = wallpaper_path.to_str().unwrap();
         tracing::debug!("[windows] setting wallpaper {}", wallpaper_path);
 
