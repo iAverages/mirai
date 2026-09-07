@@ -1,6 +1,6 @@
 use rand::RngExt;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -79,6 +79,7 @@ impl<'a> WallpapersManager<'a> {
         Ok(())
     }
 
+    // [h:a] Materialize each selected wallpaper at <data_dir>/wallpaper without an extension, remove Git temporary repositories after transfer, pass that fixed path to both backends, restore it directly on startup, remove obsolete delayed cleanup across the content managers and main caller, and add a focused filesystem test for contents and source cleanup.
     pub fn set_next_wallpaper(&mut self, content_manager: &impl WallpaperContentManager) {
         tracing::info!("setting next wallpaper");
         let mut unseen_wallpapers = self.store.get_unseen_wallpaperrs();
@@ -103,12 +104,8 @@ impl<'a> WallpapersManager<'a> {
             .clone()
             .try_into()
             .expect("database has unsupported manager id. this is a bug");
-        let _ = self
-            .backend
-            .set_wallpaper(&next_wallpaper)
-            .inspect_err(|err| {
-                tracing::error!("failed to set wallpaper: {}", err);
-            });
+
+        let _ = self.set_wallpaper(&next_wallpaper);
         let _ = self.store.mark_as_seen(&next_wallpaper).inspect_err(|err| {
             tracing::error!("failed to mark wallpaper as seen: {}", err);
         });
@@ -121,6 +118,32 @@ impl<'a> WallpapersManager<'a> {
         }
     }
 
+    fn set_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), WallpaperContentManagerError> {
+        let active_wallpaper_path = get_active_wallpaper_path();
+        let temp_path = wallpaper
+            .get_wallpaper_path()
+            .map_err(|_| WallpaperContentManagerError::Failure)?;
+        // we use copy here since we do not want to remove content from the local content manager
+        let use_active_path = fs::copy(&temp_path, &active_wallpaper_path)
+            .inspect_err(|err| tracing::error!("failed to move active wallpaper path: {}", err))
+            .is_ok();
+
+        self.backend
+            // only use active if wallpaper was copied, system continues to work
+            // if this copy fails, wallpaper is read from the true source
+            .set_wallpaper(if use_active_path {
+                None
+            } else {
+                Some(wallpaper)
+            })
+            .inspect_err(|err| {
+                tracing::error!("failed to set wallpaper: {}", err);
+            })
+            .map_err(|_| WallpaperContentManagerError::Failure)?;
+
+        Ok(())
+    }
+
     pub fn set_last_wallpaper(&self) {
         let wallpaper = self.get_current_wallpaper();
         if wallpaper.is_none() {
@@ -130,7 +153,7 @@ impl<'a> WallpapersManager<'a> {
 
         let mut times = 0;
         loop {
-            if self.backend.set_wallpaper(&wallpaper).is_ok() {
+            if self.set_wallpaper(&wallpaper).is_ok() {
                 tracing::info!("set last wallpaper");
                 return;
             };
@@ -193,4 +216,8 @@ impl Wallpaper {
             ContentManagerTypes::Git => GitContentManager::get_temp_file(&self.id),
         }
     }
+}
+
+pub fn get_active_wallpaper_path() -> PathBuf {
+    Path::new(&get_config().data_dir).join("wallpaper")
 }

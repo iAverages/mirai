@@ -6,6 +6,7 @@ use crate::log::Log;
 use crate::log_debug;
 use crate::log_error;
 use crate::wallpaper::Wallpaper;
+use crate::wallpaper::get_active_wallpaper_path;
 
 use super::{WallpaperBackend, WallpaperBackendError};
 
@@ -29,10 +30,13 @@ impl Log for SwwCliBackend {
 }
 
 impl WallpaperBackend for SwwCliBackend {
-    fn set_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), WallpaperBackendError> {
-        let wallpaper_path = &wallpaper
-            .get_wallpaper_path()
-            .map_err(|_| WallpaperBackendError::ChangeFailure)?;
+    fn set_wallpaper(&self, wallpaper: Option<&Wallpaper>) -> Result<(), WallpaperBackendError> {
+        let wallpaper_path = match wallpaper {
+            Some(w) => w
+                .get_wallpaper_path()
+                .map_err(|_| WallpaperBackendError::ChangeFailure)?,
+            None => get_active_wallpaper_path(),
+        };
         let wallpaper_path = wallpaper_path.to_str().unwrap();
         log_debug!(&self, "setting wallpaper {}", wallpaper_path);
         let output = Command::new(self.bin_name)
