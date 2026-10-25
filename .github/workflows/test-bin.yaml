@@ -11,9 +11,12 @@ jobs:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v6
-    - uses: cachix/install-nix-action@v31
-      with:
-        github_access_token: ${{ secrets.GITHUB_TOKEN }}
-    - run: nix develop
-    - run: cargo test
+      - uses: actions/checkout@v6
+      - uses: DeterminateSystems/nix-installer-action@v16
+      - uses: Mic92/niks3-action@v1
+        continue-on-error: true
+        with:
+          server-url: https://niks3.kirsi.dev
+          skip-push: ${{ github.ref != 'refs/heads/main' }}
+      - run: nix develop
+      - run: cargo test
