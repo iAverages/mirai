@@ -715,7 +715,7 @@ dependencies = [
  "rand 0.10.0",
  "refinery",
  "rusqlite",
- "sea-query",
+ "sea-query 1.0.2",
  "sea-query-rusqlite",
  "serde",
  "thiserror",
@@ -1253,17 +1253,26 @@ checksum = "8a5d1c518eaf5eda38e5773f902b26ab6d5e9e9e2bb2349ca6c64cf96f80448c"
 dependencies = [
  "chrono",
  "inherent",
- "sea-query-derive",
  "serde_json",
  "time",
  "uuid",
 ]
 
 [[package]]
-name = "sea-query-derive"
-version = "0.4.3"
+name = "sea-query"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bae0cbad6ab996955664982739354128c58d16e126114fe88c2a493642502aab"
+checksum = "546040c653a705e60ec65ecd3191a809603734bebbc225775916dea9ae409b31"
+dependencies = [
+ "itoa",
+ "sea-query-derive",
+]
+
+[[package]]
+name = "sea-query-derive"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0b0f466921cdd3cf4b89d5c3ac2173dba89a873ab395b123a645de181ec7537"
 dependencies = [
  "darling",
  "heck 0.4.1",
@@ -1280,7 +1289,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3743bbdfb24b1a84cc1a6fbf4b1188e6851f6e00ea20944b44c56bf03a585bb4"
 dependencies = [
  "rusqlite",
- "sea-query",
+ "sea-query 0.32.7",
 ]
 
 [[package]]
